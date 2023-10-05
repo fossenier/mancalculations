@@ -2,7 +2,7 @@ PIT_COUNT = 6
 
 
 def main():
-    board = MancalaBoard()
+    run_game()
     # The game will be broken into Player 0 and Player 1 turns
     # p_turn = 0
     # game_winner = None
@@ -32,6 +32,29 @@ def is_game_over(self):
 def score(self):
     # Determine the winner or declare a tie
     pass
+
+
+def run_game():
+    game_is_over = False
+    player_turn = 0
+    board = MancalaBoard()
+    print("Mancala is starting")
+    print(board.p1_pits, board.p1_store, board.p2_pits, board.p2_store)
+    while not game_is_over:
+        pit_selection = take_turn(board, player_turn)
+        player_turn = 1 - player_turn
+    return
+
+
+def take_turn(board, player_turn):
+    print("aaaa")
+    pit_selection = -1
+    while pit_selection < 0 or pit_selection > PIT_COUNT:
+        try:
+            pit_selection = int(input("input: "))
+        except TypeError:
+            print("Sorry, that was an invalid input, please enter an integer [0, 6]")
+    return pit_selection
 
 
 class MancalaBoard:
