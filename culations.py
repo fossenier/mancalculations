@@ -1,14 +1,9 @@
 """
-This is the backend code for my Mancala game.
+This is backend code for my Mancala game.
 It provides all the functions needed to run the game.
 """
 
-import curses as C
-import time as T
-
-PIT_WIDTH = 3
-PLAYER_PIT_COUNT = 6
-STORE_WIDTH = 5
+from constants import PLAYER_PIT_COUNT
 
 
 def move_rocks(board, player_turn, pit_selection):
@@ -43,7 +38,6 @@ def run_turn(stdscr, board, player_turn):
     Returns:
         `board`: Updated game state.
     """
-    draw_board(stdscr, board, player_turn)
     print(
         f"Current board state:\nPlayer 2: {board.p_pits[1][::-1]}\nPlayer 2 Store: {board.p_store[1]}\nPlayer 1: {board.p_pits[0]}\nPlayer 1 Store: {board.p_store[0]}"
     )
@@ -60,91 +54,6 @@ def run_turn(stdscr, board, player_turn):
     else:
         board = steal_rocks(board, active_player, pit_selection)
     return board
-
-
-def draw_board(stdscr, board, player_turn):
-    """
-    Illustrates the game board in the terminal.
-
-    Args:
-        `stdscr` (`stdscr`): Curses main window.\n
-        `board` (`MancalaBoard`): Current game state.\n
-        `player_turn` (`integer`): Current player turn.\n
-    """
-    # Reset screen, draw title, draw player turn
-    stdscr.clear()
-    stdscr.addstr(0, 0, "Mancalculations")
-    stdscr.addstr(1, 0, f"Player {board.player_turn + 1}'s turn")
-
-    draw_store(stdscr, board, player_turn, 3, 0)
-
-    return
-
-
-def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
-    draw_store(stdscr, board, 0, vertical_offfset, horizontal_offset)
-    horizontal_offset += 3
-    for i in range(2):
-        for j in range(PLAYER_PIT_COUNT):
-            draw_pit(
-                stdscr,
-                board,
-                i,
-                vertical_offfset + i * 2,
-                horizontal_offset + (j + 1) * 4,
-                j,
-            )
-    draw_store(
-        stdscr, board, 1, vertical_offfset, horizontal_offset + PLAYER_PIT_COUNT * 4 - 1
-    )
-
-
-def draw_store(stdscr, board, player_turn, vertical_offfset, horizontal_offset):
-    """
-    Draws a player Mancala store at the given offset location.
-
-    Args:
-        `stdscr` (`stdscr`): Curses main window.\n
-        `board` (`MancalaBoard`): Current game state.\n
-        `player_turn` (`integer`): Current player turn.\n
-        `vertical_offfset` (`integer`): Chosen Curses main window vertical offset.\n
-        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
-    """
-    lines_to_draw = [
-        "-" * (STORE_WIDTH + 2),
-        f"|{'':^{STORE_WIDTH}}|",
-        f"|{board.p_store[player_turn]:^{STORE_WIDTH}}|",
-        f"|{'':^{STORE_WIDTH}}|",
-        "-" * (STORE_WIDTH + 2),
-    ]
-
-    for line in lines_to_draw:
-        stdscr.addstr(vertical_offfset, horizontal_offset, line)
-        vertical_offfset += 1
-
-
-def draw_pit(
-    stdscr, board, player_turn, vertical_offset, horizontal_offset, pit_selection
-):
-    """
-    Draws a player Mancala pit at the given offset location.
-
-    Args:
-        `stdscr` (`stdscr`): Curses main window.\n
-        `board` (`MancalaBoard`): Current game state.\n
-        `player_turn` (`integer`): Current player turn.\n
-        `vertical_offfset` (`integer`): Chosen Curses main window vertical offset.\n
-        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
-        `pit_selection` (`integer`): Chosen player pit.\n"""
-    lines_to_draw = [
-        "-" * (PIT_WIDTH + 1),
-        f"{board.p_pits[player_turn][pit_selection]:^{PIT_WIDTH}}|",
-        "-" * (PIT_WIDTH + 1),
-    ]
-
-    for line in lines_to_draw:
-        stdscr.addstr(vertical_offset, horizontal_offset, line)
-        vertical_offset += 1
 
 
 def steal_rocks(board, active_player, pit_selection):
@@ -180,12 +89,11 @@ def score(board):
 
 
 def run_game():
-    stdscr = C.initscr()
     game_is_over = False
     player_turn = 0
     board = MancalaBoard()
     while not game_is_over:
-        board = run_turn(stdscr, board, player_turn)
+        # board = run_turn(stdscr, board, player_turn)
         game_is_over = is_game_over(board)
         player_turn = 1 - player_turn
     return score(board)
