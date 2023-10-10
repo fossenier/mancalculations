@@ -5,7 +5,9 @@ It provides all the functions needed to run the game.
 
 import curses as C
 
+PIT_WIDTH = 3
 PLAYER_PIT_COUNT = 6
+STORE_WIDTH = 5
 
 
 def move_rocks(board, player_turn, pit_selection):
@@ -79,11 +81,23 @@ def draw_board(stdscr, board, player_turn):
 
 
 def draw_store(stdscr, board, player_turn, row, column):
-    stdscr.addstr(row, column, "-" * 7)
-    stdscr.addstr(row + 1, column, "|     |")
-    stdscr.addstr(row + 2, column, f"|  {board.p_store[player_turn]:^5}  |")
-    stdscr.addstr(row + 3, column, "|     |")
-    stdscr.addstr(row + 4, column, "-" * 7)
+    lines_to_draw = [
+        "-" * (2 + STORE_WIDTH),
+        f"|{'':^{STORE_WIDTH}}|",
+        f"|{board.p_store[player_turn]:^{STORE_WIDTH}}|",
+        f"|{'':^{STORE_WIDTH}}|",
+        "-" * (2 + STORE_WIDTH),
+    ]
+
+    for line in lines_to_draw:
+        stdscr.addstr(row, column, line)
+        row += 1
+
+    wait = stdscr.getch()
+    return row, column + 2 + STORE_WIDTH
+
+
+def draw_pits(stdscr, board, player_turn, row, column):
     return
 
 
