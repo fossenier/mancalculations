@@ -81,36 +81,70 @@ def draw_board(stdscr, board, player_turn):
     return
 
 
-def draw_store(stdscr, board, player_turn, row, column):
-    store_width = 2 + STORE_WIDTH
+def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
+    draw_store(stdscr, board, 0, vertical_offfset, horizontal_offset)
+    horizontal_offset += 3
+    for i in range(2):
+        for j in range(PLAYER_PIT_COUNT):
+            draw_pit(
+                stdscr,
+                board,
+                i,
+                vertical_offfset + i * 2,
+                horizontal_offset + (j + 1) * 4,
+                j,
+            )
+    draw_store(
+        stdscr, board, 1, vertical_offfset, horizontal_offset + PLAYER_PIT_COUNT * 4 - 1
+    )
+
+
+def draw_store(stdscr, board, player_turn, vertical_offfset, horizontal_offset):
+    """
+    Draws a player Mancala store at the given offset location.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+        `board` (`MancalaBoard`): Current game state.\n
+        `player_turn` (`integer`): Current player turn.\n
+        `vertical_offfset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+    """
     lines_to_draw = [
-        "-" * store_width,
+        "-" * (STORE_WIDTH + 2),
         f"|{'':^{STORE_WIDTH}}|",
         f"|{board.p_store[player_turn]:^{STORE_WIDTH}}|",
         f"|{'':^{STORE_WIDTH}}|",
-        "-" * store_width,
+        "-" * (STORE_WIDTH + 2),
     ]
 
     for line in lines_to_draw:
-        stdscr.addstr(row, column, line)
-        row += 1
-
-    return row, column + store_width
+        stdscr.addstr(vertical_offfset, horizontal_offset, line)
+        vertical_offfset += 1
 
 
-def draw_pits(stdscr, board, player_turn, row, column, pit_selection):
-    pit_width = 2 + PIT_WIDTH
+def draw_pit(
+    stdscr, board, player_turn, vertical_offset, horizontal_offset, pit_selection
+):
+    """
+    Draws a player Mancala pit at the given offset location.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+        `board` (`MancalaBoard`): Current game state.\n
+        `player_turn` (`integer`): Current player turn.\n
+        `vertical_offfset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+        `pit_selection` (`integer`): Chosen player pit.\n"""
     lines_to_draw = [
-        "-" * pit_width,
-        f"|{board.p_pits[player_turn][pit_selection]:^{PIT_WIDTH}}|",
-        "-" * pit_width,
+        "-" * (PIT_WIDTH + 1),
+        f"{board.p_pits[player_turn][pit_selection]:^{PIT_WIDTH}}|",
+        "-" * (PIT_WIDTH + 1),
     ]
 
     for line in lines_to_draw:
-        stdscr.addstr(row, column, line)
-        row += 1
-
-    return row, column + pit_width
+        stdscr.addstr(vertical_offset, horizontal_offset, line)
+        vertical_offset += 1
 
 
 def steal_rocks(board, active_player, pit_selection):
