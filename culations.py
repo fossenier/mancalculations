@@ -4,6 +4,7 @@ It provides all the functions needed to run the game.
 """
 
 import curses as C
+import time as T
 
 PIT_WIDTH = 3
 PLAYER_PIT_COUNT = 6
@@ -81,24 +82,35 @@ def draw_board(stdscr, board, player_turn):
 
 
 def draw_store(stdscr, board, player_turn, row, column):
+    store_width = 2 + STORE_WIDTH
     lines_to_draw = [
-        "-" * (2 + STORE_WIDTH),
+        "-" * store_width,
         f"|{'':^{STORE_WIDTH}}|",
         f"|{board.p_store[player_turn]:^{STORE_WIDTH}}|",
         f"|{'':^{STORE_WIDTH}}|",
-        "-" * (2 + STORE_WIDTH),
+        "-" * store_width,
     ]
 
     for line in lines_to_draw:
         stdscr.addstr(row, column, line)
         row += 1
 
-    wait = stdscr.getch()
-    return row, column + 2 + STORE_WIDTH
+    return row, column + store_width
 
 
-def draw_pits(stdscr, board, player_turn, row, column):
-    return
+def draw_pits(stdscr, board, player_turn, row, column, pit_selection):
+    pit_width = 2 + PIT_WIDTH
+    lines_to_draw = [
+        "-" * pit_width,
+        f"|{board.p_pits[player_turn][pit_selection]:^{PIT_WIDTH}}|",
+        "-" * pit_width,
+    ]
+
+    for line in lines_to_draw:
+        stdscr.addstr(row, column, line)
+        row += 1
+
+    return row, column + pit_width
 
 
 def steal_rocks(board, active_player, pit_selection):
