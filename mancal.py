@@ -23,14 +23,12 @@ def main(stdscr):
     board = MancalaBoard()
     is_game_over = False
     player_turn = 1
-
-    # setup initial visual state
-    draw_header(stdscr, 0)
     draw_mancala_board(stdscr, board, 3, 0)
 
     # main game loop
     while not is_game_over:
         player_turn = 1 - player_turn
+        draw_header(stdscr, player_turn)
         run_turn(stdscr, board, player_turn)
         is_game_over = get_game_over(board)
 

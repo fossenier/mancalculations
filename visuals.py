@@ -4,6 +4,7 @@ It provides all the functions needed to display the game.
 """
 
 from constants import PIT_WIDTH, PLAYER_PIT_COUNT, STORE_WIDTH
+import curses as C
 
 
 def draw_blank(stdscr, vertical_offset, horizontal_offset, height):
@@ -120,7 +121,9 @@ def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):
     stdscr.refresh()
 
     # Get the user's input
+    C.echo()
     user_input = stdscr.getstr().decode("utf-8")
+    C.noecho()
     return user_input
 
 
