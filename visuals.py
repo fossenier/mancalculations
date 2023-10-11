@@ -22,15 +22,15 @@ def draw_blank(stdscr, vertical_offset, horizontal_offset, height):
     stdscr.refresh()
 
 
-def draw_error_message(stdscr, vertical_offset, horizontal_offset, message):
+def draw_message(stdscr, vertical_offset, horizontal_offset, message):
     """
-    Draws an error message in the terminal.
+    Draws a message in the terminal.
 
     Args:
         `stdscr` (`stdscr`): Curses main window.\n
         `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
         `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
-        `message` (`string`): Error message to display.\n
+        `message` (`string`): Message to display.\n
     """
     stdscr.addstr(vertical_offset, horizontal_offset, message)
     stdscr.refresh()
@@ -75,8 +75,13 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
             )
     # Draw Player 1's store (on the right)
     draw_store(
-        stdscr, board, 0, vertical_offfset, horizontal_offset + PLAYER_PIT_COUNT * 4 - 1
+        stdscr,
+        board,
+        0,
+        vertical_offfset,
+        horizontal_offset + (PLAYER_PIT_COUNT + 1) * 4 - 1,
     )
+    stdscr.refresh()
 
 
 def draw_pit(
@@ -115,7 +120,8 @@ def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):
     stdscr.refresh()
 
     # Get the user's input
-    return stdscr.getstr().decode("utf-8")
+    user_input = stdscr.getstr().decode("utf-8")
+    return user_input
 
 
 def draw_store(stdscr, board, player_turn, vertical_offfset, horizontal_offset):

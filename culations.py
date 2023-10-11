@@ -7,26 +7,43 @@ from constants import PLAYER_PIT_COUNT
 
 
 def move_rocks(board, player_turn, pit_selection):
+    """
+    Moves the rocks from the selected pit.
+
+    Args:
+        `board` (`MancalaBoard`): Current game state.\n
+        `player_turn` (`integer`): Current player turn.\n
+        `pit_selection` (`integer`): Player's selected pit of choice.\n
+
+    Returns:
+        `board` (`MancalaBoard`): Updated game state.\n
+        `player_turn` (`integer`): Most recent active player's side of the board.\n
+        `pit_selection` (`integer`): Most recent active pit.\n
+    """
+    # track active side of the board, pick up rocks from selected pit
     active_player = player_turn
-    # Pick up rocks
     rock_count, board.p_pits[active_player][pit_selection] = (
         board.p_pits[active_player][pit_selection],
         0,
     )
-    for _ in range(rock_count):
+    # move rocks from selected pit
+    while rock_count > 0:
         pit_selection += 1
-        # Add to store when at the end of the board, switch players, reset pit selection
         if pit_selection == PLAYER_PIT_COUNT:
-            board.p_store[active_player] += 1
+            # add to store if the active side matches the player's turn
+            if active_player == player_turn:
+                board.p_store[active_player] += 1
+                rock_count -= 1
+            # switch active side of the board, reset pit selection
             active_player = 1 - active_player
             pit_selection = -1
-        # Add to curret pit
         else:
             board.p_pits[active_player][pit_selection] += 1
+            rock_count -= 1
     return board, active_player, pit_selection
 
 
-def run_turn(stdscr, board, player_turn):
+def run_turn(stdscr, board, active_player):
     """
     Runs one full user turn of mancalculations.
 
@@ -56,24 +73,40 @@ def run_turn(stdscr, board, player_turn):
     return board
 
 
-def steal_rocks(board, active_player, pit_selection):
-    # Check if the last rock landed in an empty pit on the player's side
+def steal_rocks(board, active_side, player_turn, active_pit):
+    """
+    Performs a steal if the last rock landed in an empty pit on the player's side.
+
+    Args:
+        `board` (`MancalaBoard`): Current game state.\n
+        `active_side` (`integer`): Most recent active side of the board.\n
+        `player_turn` (`integer`): Current player turn.\n
+        `active_pit` (`integer`): Most recent active pit.\n
+
+    Returns:
+        `board` (`MancalaBoard`): Updated game state.\n
+        `is_steal` (`boolean`): Whether or not a steal occurred.\n
+    """
+    if active_side != player_turn:
+        return board, False
+    is_steal = False
+    # check if the last rock landed in an empty pit on the player's side
     if (
-        board.p_pits[active_player][pit_selection] == 1
-        and board.p_pits[1 - active_player][(PLAYER_PIT_COUNT - 1) - pit_selection] != 0
+        board.p_pits[active_side][active_pit] == 1
+        and board.p_pits[1 - active_side][(PLAYER_PIT_COUNT - 1) - active_pit] != 0
     ):
-        print("Steal!")
-        # Steal the rocks from the opposite pit
-        board.p_store[active_player] += (
-            board.p_pits[active_player][pit_selection]
-            + board.p_pits[1 - active_player][(PLAYER_PIT_COUNT - 1) - pit_selection]
+        is_steal = True
+        # steal the rocks from the opposite pit
+        board.p_store[active_side] += (
+            board.p_pits[active_side][active_pit]
+            + board.p_pits[1 - active_side][(PLAYER_PIT_COUNT - 1) - active_pit]
         )
-        board.p_pits[active_player][pit_selection] = 0
-        board.p_pits[1 - active_player][(PLAYER_PIT_COUNT - 1) - pit_selection] = 0
-    return board
+        board.p_pits[active_side][active_pit] = 0
+        board.p_pits[1 - active_side][(PLAYER_PIT_COUNT - 1) - active_pit] = 0
+    return board, is_steal
 
 
-def is_game_over(board):
+def get_game_over(board):
     # Check if the game is over
     for player in range(2):
         if sum(board.p_pits[player]) == 0:
@@ -94,7 +127,7 @@ def run_game():
     board = MancalaBoard()
     while not game_is_over:
         # board = run_turn(stdscr, board, player_turn)
-        game_is_over = is_game_over(board)
+        game_is_over = get_game_over(board)
         player_turn = 1 - player_turn
     return score(board)
 
