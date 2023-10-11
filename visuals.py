@@ -6,59 +6,34 @@ It provides all the functions needed to display the game.
 from constants import PIT_WIDTH, PLAYER_PIT_COUNT, STORE_WIDTH
 
 
-def draw_footer_blank(stdscr, vertical_offset, horizontal_offset):
+def draw_blank(stdscr, vertical_offset, horizontal_offset, height):
     """
     Clears the footer in the terminal.
 
     Args:
         `stdscr` (`stdscr`): Curses main window.\n
+        `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+        `height` (`integer`): Height of the footer to clear.\n
     """
-    for i in range(5):
+    for i in range(height):
         stdscr.move(vertical_offset + i, horizontal_offset)
         stdscr.clrtoeol()
     stdscr.refresh()
 
 
-def draw_footer_pit_selection(stdscr, vertical_offset, horizontal_offset):
+def draw_error_message(stdscr, vertical_offset, horizontal_offset, message):
     """
-    Draws a footer in the terminal asking the user to select a pit.
+    Draws an error message in the terminal.
 
     Args:
         `stdscr` (`stdscr`): Curses main window.\n
+        `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+        `message` (`string`): Error message to display.\n
     """
-    stdscr.addstr(vertical_offset, horizontal_offset, "Choose a valid pit (1-6): ")
+    stdscr.addstr(vertical_offset, horizontal_offset, message)
     stdscr.refresh()
-
-    # Get the user's input
-    user_input = stdscr.getstr().decode("utf-8")
-
-    # Convert the input to an integer
-    try:
-        pit_selection = int(user_input)
-        if pit_selection < 1 or pit_selection > 6:
-            # Handle invalid range
-            stdscr.addstr(
-                vertical_offset + 1,
-                horizontal_offset,
-                "Invalid choice. Please enter a number between 1 and 6.",
-            )
-            stdscr.refresh()
-            draw_footer_pit_selection(stdscr, vertical_offset, horizontal_offset)
-        else:
-            stdscr.move(vertical_offset + 1, horizontal_offset)
-            stdscr.clrtoeol()
-            stdscr.refresh()
-    except ValueError:
-        # Handle non-integer input
-        stdscr.addstr(
-            vertical_offset + 1,
-            horizontal_offset,
-            "Invalid input. That wasn't a number.",
-        )
-        stdscr.refresh()
-
-    draw_footer_blank(stdscr, vertical_offset, horizontal_offset)
-    return pit_selection
 
 
 def draw_header(stdscr, player_turn):
@@ -126,6 +101,21 @@ def draw_pit(
     for line in lines_to_draw:
         stdscr.addstr(vertical_offset, horizontal_offset, line)
         vertical_offset += 1
+
+
+def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):
+    """
+    Draws in the terminal asking the user to select a pit.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+    """
+    # Prompt user to enter a valid pit
+    stdscr.addstr(vertical_offset, horizontal_offset, "Choose a valid pit (1-6): ")
+    stdscr.refresh()
+
+    # Get the user's input
+    return stdscr.getstr().decode("utf-8")
 
 
 def draw_store(stdscr, board, player_turn, vertical_offfset, horizontal_offset):
