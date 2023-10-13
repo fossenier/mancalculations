@@ -1,5 +1,9 @@
-import curses
-from visuals import draw_pit_selection
+parking_tickets = []
 
-if __name__ == "__main__":
-    curses.wrapper(draw_pit_selection, 9, 0)
+try:
+    k = max(parking_tickets)
+except ValueError:
+    k = -1
+most_tickets = k if 0 <= k else 0
+
+print(most_tickets)

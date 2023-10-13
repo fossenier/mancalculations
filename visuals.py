@@ -62,18 +62,26 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
     # Draw Player 2's store (on the left)
     draw_store(stdscr, board, 1, vertical_offfset, horizontal_offset)
     horizontal_offset += 3
-    # For each player
-    for i in range(2):
-        # Draw each pit
-        for j in range(PLAYER_PIT_COUNT):
-            draw_pit(
-                stdscr,
-                board,
-                i,
-                vertical_offfset + i * 2,
-                horizontal_offset + (j + 1) * 4,
-                j,
-            )
+    # draw Player 1's pits (on the bottom)
+    for i in range(PLAYER_PIT_COUNT):
+        draw_pit(
+            stdscr,
+            board,
+            0,
+            vertical_offfset + 2,
+            horizontal_offset + (i + 1) * 4,
+            i,
+        )
+    # draw Player 2's pits (on the top and in reverse order)
+    for i in range(PLAYER_PIT_COUNT):
+        draw_pit(
+            stdscr,
+            board,
+            1,
+            vertical_offfset,
+            horizontal_offset + (PLAYER_PIT_COUNT - i) * 4,
+            i,
+        )
     # Draw Player 1's store (on the right)
     draw_store(
         stdscr,
