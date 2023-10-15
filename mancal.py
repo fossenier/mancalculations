@@ -3,7 +3,7 @@ This is the frontend code for my Mancala game.
 It runs the game and provides the user interface.
 """
 
-from culations import get_game_over, MancalaBoard, move_rocks, steal_rocks
+from culations import check_game_over, MancalaBoard, move_rocks, score_game, steal_rocks
 import curses as curses
 from visuals import (
     draw_blank,
@@ -15,6 +15,12 @@ from visuals import (
 
 
 def main(stdscr):
+    """
+    Runs a game of Manncala for the user.
+
+    Args:
+        `stdscr` (`stdscr`): Cureses main window.
+    """
     # clear screen and hide cursor
     stdscr.clear()
     curses.curs_set(0)
@@ -30,7 +36,10 @@ def main(stdscr):
         player_turn = 1 - player_turn
         draw_header(stdscr, player_turn)
         run_turn(stdscr, board, player_turn)
-        is_game_over = get_game_over(board)
+        is_game_over = check_game_over(board)
+
+    # display game over message
+    p1_score, p2_score = score_game(board)
 
 
 def get_player_move(stdscr):
@@ -70,19 +79,26 @@ def get_player_move(stdscr):
 
 
 def run_turn(stdscr, board, player_turn):
+    """
+    Runs one full user turn of mancalculations.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+        `board` (`MancalaBoard`): Current game state.\n
+        `player_turn` (`integer`): Current player turn.
+    """
     pit_selection = get_player_move(stdscr)
-    board, active_side, active_pit = move_rocks(board, player_turn, pit_selection)
+    active_side, active_pit = move_rocks(board, player_turn, pit_selection)
     draw_mancala_board(stdscr, board, 3, 0)
     # give the player another turn if they landed in their store
     if active_pit == -1:
         draw_message(stdscr, 11, 0, "Nice one, take another turn!")
-        board = run_turn(stdscr, board, player_turn)
+        run_turn(stdscr, board, player_turn)
     # if the active side is the player's, check if a steal occurs
     else:
-        board, is_steal = steal_rocks(board, active_side, player_turn, active_pit)
+        is_steal = steal_rocks(board, active_side, player_turn, active_pit)
         if is_steal:
             draw_message(stdscr, 11, 0, "Steal!")
-    return board
 
 
 if __name__ == "__main__":
