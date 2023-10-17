@@ -59,7 +59,7 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
         `vertical_offfset` (`integer`): Chosen Curses main window vertical offset.\n
         `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
     """
-    # Draw Player 2's store (on the left)
+    # draw Player 2's store (on the top)
     draw_store(stdscr, board, 1, vertical_offfset, horizontal_offset)
     horizontal_offset += 3
     # draw Player 1's pits (on the bottom)
@@ -82,7 +82,7 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
             horizontal_offset + (PLAYER_PIT_COUNT - i) * 4,
             i,
         )
-    # Draw Player 1's store (on the right)
+    # draw Player 1's store (on the right)
     draw_store(
         stdscr,
         board,
@@ -124,11 +124,11 @@ def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):
     Args:
         `stdscr` (`stdscr`): Curses main window.\n
     """
-    # Prompt user to enter a valid pit
+    # prompt user to enter a valid pit
     stdscr.addstr(vertical_offset, horizontal_offset, "Choose a valid pit (1-6): ")
     stdscr.refresh()
 
-    # Get the user's input
+    # get the user's input
     C.echo()
     user_input = stdscr.getstr().decode("utf-8")
     C.noecho()

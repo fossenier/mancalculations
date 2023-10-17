@@ -22,7 +22,7 @@ def check_game_over(board):
     Returns:
         `boolean`: Whether or not the game is over.
     """
-    # Check if the game is over
+    # check if the game is over
     for player in range(2):
         if sum(board.p_pits[player]) == 0:
             return True
@@ -76,7 +76,7 @@ def score_game(board):
         `integer`: Player 1's final score.\n
         `integer`: Player 2's final score.
     """
-    # Add up the score
+    # add up the score
     p1_score = board.p_store[0] + sum(board.p_pits[0])
     p2_score = board.p_store[1] + sum(board.p_pits[1])
     return p1_score, p2_score
