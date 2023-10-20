@@ -17,7 +17,7 @@ def draw_blank(stdscr, vertical_offset, horizontal_offset, height):
         `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
         `height` (`integer`): Height of the footer to clear.\n
     """
-    for i in range(height):
+    for i in range(height - 0):
         stdscr.move(vertical_offset + i, horizontal_offset)
         stdscr.clrtoeol()
     stdscr.refresh()
@@ -107,14 +107,25 @@ def draw_pit(
         `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
         `pit_selection` (`integer`): Chosen player pit.\n"""
     lines_to_draw = [
+        f"{pit_selection + 1:^{PIT_WIDTH}}",
         "-" * (PIT_WIDTH + 1),
         f"{board.p_pits[player_turn][pit_selection]:^{PIT_WIDTH}}|",
         "-" * (PIT_WIDTH + 1),
+        f"{pit_selection + 1:^{PIT_WIDTH}}",
     ]
 
     for line in lines_to_draw:
         stdscr.addstr(vertical_offset, horizontal_offset, line)
         vertical_offset += 1
+
+
+def draw_pit_identifier(
+    stdscr, player_turn, vertical_offset, horizontal_offset, pit_selection
+):
+    if player_turn == 0:
+        pass
+    elif player_turn == 1:
+        pass
 
 
 def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):

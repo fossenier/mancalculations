@@ -4,6 +4,7 @@ It runs the game and provides the user interface.
 """
 
 from constants import (
+    VERTICAL_OFFSET_OF_BOARD,
     VERTICAL_OFFSET_OF_ERROR,
     VERTICAL_OFFSET_OF_PROMPT,
     MESSAGE_WAIT,
@@ -35,7 +36,7 @@ def main(stdscr):
     board = MancalaBoard()
     is_game_over = False
     player_turn = 1
-    draw_mancala_board(stdscr, board, 3, 0)
+    draw_mancala_board(stdscr, board, VERTICAL_OFFSET_OF_BOARD, 0)
 
     # main game loop
     while not is_game_over:
@@ -104,7 +105,7 @@ def run_turn(stdscr, board, player_turn):
     is_steal = False
     pit_selection = get_player_move(stdscr)
     active_side, active_pit = move_rocks(board, player_turn, pit_selection)
-    draw_mancala_board(stdscr, board, 3, 0)
+    draw_mancala_board(stdscr, board, VERTICAL_OFFSET_OF_BOARD, 0)
     # give the player another turn if they landed in their store
     if active_pit == -1:
         draw_blank(stdscr, VERTICAL_OFFSET_OF_PROMPT, 0, 1)
