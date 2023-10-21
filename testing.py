@@ -1,2 +1,4 @@
+line = 7
+
 for i in range(1):
-    print(i)
+    print(f"deleting line {line - i}")

@@ -5,10 +5,9 @@ It provides all the functions needed to display the game.
 
 from constants import (
     HEIGHT_IDENTIFIERS,
-    HEIGHT_PIT,
     HORIZONTAL_LINE,
     HORIZONTAL_OFFSET,
-    OFFSET_HEIGHT_PIT,
+    EFFECTIVE_HEIGHT_PIT,
     OFFSET_WIDTH_PIT,
     PLAYER_PIT_COUNT,
     VERTICAL_LINE,
@@ -19,6 +18,7 @@ from constants import (
     WIDTH_STORE,
 )
 import curses as C
+import time as time
 
 
 def draw_blank(stdscr, vertical_offset, horizontal_offset, lines):
@@ -32,36 +32,22 @@ def draw_blank(stdscr, vertical_offset, horizontal_offset, lines):
         `lines` (`integer`): Number of lines to clear.
     """
     # iterate through the lines and clear them
-    for i in range(lines - 1):
+    for i in range(lines):
         stdscr.move(vertical_offset + i, horizontal_offset)
         stdscr.clrtoeol()
-    stdscr.refresh()
-
-
-def draw_message(stdscr, vertical_offset, horizontal_offset, message):
-    """
-    Draws a message.
-
-    Args:
-        `stdscr` (`stdscr`): Curses main window.\n
-        `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
-        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
-        `message` (`string`): Message to display.
-    """
-    stdscr.addstr(vertical_offset, horizontal_offset, message)
     stdscr.refresh()
 
 
 def draw_header(stdscr, player_turn):
     """
     Draws the header of the game.
-
     Args:
+
         `stdscr` (`stdscr`): Curses main window.\n
         `player_turn` (`integer`): Current player turn.\n
     """
-    draw_message(stdscr, VERTICAL_OFFSET_OF_HEADER, HORIZONTAL_OFFSET, "Mancala")
-    draw_message(
+    draw_text(stdscr, VERTICAL_OFFSET_OF_HEADER, HORIZONTAL_OFFSET, "Mancala")
+    draw_text(
         stdscr,
         VERTICAL_OFFSET_OF_HEADER + 1,
         HORIZONTAL_OFFSET,
@@ -108,14 +94,17 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
             stdscr,
             board,
             P1,
-            vertical_offfset + HEIGHT_IDENTIFIERS + OFFSET_HEIGHT_PIT,
+            vertical_offfset + HEIGHT_IDENTIFIERS + EFFECTIVE_HEIGHT_PIT,
             horizontal_offset + OFFSET_WIDTH_PIT * pit,
             pit,
         )
         # draw Player 2's pit identifiers (on the bottom)
         draw_pit_identifier(
             stdscr,
-            vertical_offfset + HEIGHT_IDENTIFIERS + OFFSET_HEIGHT_PIT + HEIGHT_PIT,
+            vertical_offfset
+            + HEIGHT_IDENTIFIERS
+            + EFFECTIVE_HEIGHT_PIT * 2
+            + HEIGHT_IDENTIFIERS,
             horizontal_offset - len(VERTICAL_LINE) + OFFSET_WIDTH_PIT * pit,
             pit + 1,
         )
@@ -130,6 +119,23 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
         horizontal_offset + OFFSET_WIDTH_PIT * PLAYER_PIT_COUNT,
     )
     stdscr.refresh()
+
+
+def draw_message(stdscr, vertical_offset, horizontal_offset, message, wait_time):
+    """
+    Draws a message for a specified amount of time.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+        `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+        `message` (`string`): Message to display.\n
+        `wait_time` (`float`): Time to display message.
+    """
+    draw_blank(stdscr, vertical_offset, horizontal_offset, 1)
+    draw_text(stdscr, vertical_offset, horizontal_offset, message)
+    time.sleep(wait_time)
+    draw_blank(stdscr, vertical_offset, horizontal_offset, 1)
 
 
 def draw_pit(
@@ -206,3 +212,17 @@ def draw_store(stdscr, board, player_turn, vertical_offfset, horizontal_offset):
     for line in lines_to_draw:
         stdscr.addstr(vertical_offfset + line_count, horizontal_offset, line)
         line_count += 1
+
+
+def draw_text(stdscr, vertical_offset, horizontal_offset, text):
+    """
+    Draws text.
+
+    Args:
+        `stdscr` (`stdscr`): Curses main window.\n
+        `vertical_offset` (`integer`): Chosen Curses main window vertical offset.\n
+        `horizontal_offset` (`integer`): Chosen Curses main window horizontal offset.\n
+        `text` (`string`): Text to display.
+    """
+    stdscr.addstr(vertical_offset, horizontal_offset, text)
+    stdscr.refresh()
