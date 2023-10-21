@@ -1,5 +1,6 @@
 """
-This is the list of constants for my Mancala game.
+This is backend code for my Mancala game.
+It provides all the constants used to run the game.
 """
 
 # Toggle-able constants

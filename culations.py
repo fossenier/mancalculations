@@ -8,7 +8,9 @@ from constants import PLAYER_PIT_COUNT
 
 class MancalaBoard:
     def __init__(self):
-        self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
+        # self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
+        # create temporary board for testing that is near empty
+        self.p_pits = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0]]
         self.p_store = [0, 0]
 
 

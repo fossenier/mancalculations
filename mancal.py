@@ -14,6 +14,7 @@ from constants import (
 from culations import check_game_over, MancalaBoard, move_rocks, score_game, steal_rocks
 from visuals import (
     draw_blank,
+    draw_game_over_animation,
     draw_header,
     draw_mancala_board,
     draw_message,
@@ -50,6 +51,7 @@ def main(stdscr):
 
     # display game over message
     p1_score, p2_score = score_game(board)
+    draw_game_over_animation(stdscr, p1_score, p2_score)
 
 
 def get_player_move(stdscr):

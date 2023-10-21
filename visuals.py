@@ -1,5 +1,5 @@
 """
-This is the backend code for my Mancala game.
+This is backend code for my Mancala game.
 It provides all the functions needed to display the game.
 """
 
@@ -17,7 +17,8 @@ from constants import (
     WIDTH_PIT,
     WIDTH_STORE,
 )
-import curses as C
+import curses as curses
+import random as random
 import time as time
 
 
@@ -38,6 +39,63 @@ def draw_blank(stdscr, vertical_offset, horizontal_offset, lines):
     stdscr.refresh()
 
 
+def draw_game_over_animation(stdscr, player1_score, player2_score):
+    # clear the screen
+    stdscr.clear()
+
+    # set up configurations
+    curses.start_color()
+    curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+
+    # get screen dimensions
+    height, width = stdscr.getmaxyx()
+
+    # define the "Game Over" text and the player scores
+    text = "Game Over"
+    p1_text = f"Player 1 Score: {player1_score}"
+    p2_text = f"Player 2 Score: {player2_score}"
+    exit_text = "Press any key to exit"
+
+    # calculate the starting position for the text to be centered
+    x = width // 2 - len(text) // 2
+    y = height // 2
+
+    while True:
+        # check for any key press to exit
+        key = stdscr.getch()
+        if key != -1:
+            break
+
+        stdscr.clear()
+
+        # alternate colors
+        color = curses.color_pair(random.randint(1, 2))
+
+        # move the text by random amounts
+        dx = random.randint(-3, 3)
+        dy = random.randint(-1, 1)
+
+        x = max(0, min(width - len(text), x + dx))
+        y = max(0, min(height - 1, y + dy))
+
+        stdscr.addstr(y, x, text, color)
+        stdscr.addstr(y + 2, x - 3, p1_text)
+        stdscr.addstr(y + 3, x - 3, p2_text)
+
+        # display exit message
+        stdscr.addstr(height - 1, 0, exit_text)
+
+        stdscr.refresh()
+
+        time.sleep(0.5)
+
+    # wait for any key press to exit
+    stdscr.getch()
+
+
 def draw_header(stdscr, player_turn):
     """
     Draws the header of the game.
@@ -46,7 +104,12 @@ def draw_header(stdscr, player_turn):
         `stdscr` (`stdscr`): Curses main window.\n
         `player_turn` (`integer`): Current player turn.\n
     """
-    draw_text(stdscr, VERTICAL_OFFSET_OF_HEADER, HORIZONTAL_OFFSET, "Mancala")
+    draw_text(
+        stdscr,
+        VERTICAL_OFFSET_OF_HEADER,
+        HORIZONTAL_OFFSET,
+        "Mancala - fossenier on GitHub",
+    )
     draw_text(
         stdscr,
         VERTICAL_OFFSET_OF_HEADER + 1,
@@ -181,9 +244,9 @@ def draw_pit_selection(stdscr, vertical_offset, horizontal_offset):
     stdscr.refresh()
 
     # get the user's input
-    C.echo()
+    curses.echo()
     user_input = stdscr.getstr().decode("utf-8")
-    C.noecho()
+    curses.noecho()
     return user_input
 
 
