@@ -22,6 +22,11 @@ import random as random
 import time as time
 
 
+class Visuals:
+    def __init__(self):
+        pass
+
+
 def draw_blank(stdscr, vertical_offset, horizontal_offset, lines):
     """
     Clears a specified quantity of lines.
@@ -130,7 +135,7 @@ def draw_mancala_board(stdscr, board, vertical_offfset, horizontal_offset):
     """
     # draw Player 2's store (on the left below upper pit identifiers)
     draw_store(
-        stdscr, board, P1, vertical_offfset + HEIGHT_IDENTIFIERS, horizontal_offset
+        stdscr, board, P2, vertical_offfset + HEIGHT_IDENTIFIERS, horizontal_offset
     )
     horizontal_offset += WIDTH_STORE
     for pit in range(PLAYER_PIT_COUNT):

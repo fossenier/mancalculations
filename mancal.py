@@ -3,6 +3,10 @@ This is the user facing code for my Mancala game.
 It runs the game and provides the user interface.
 """
 
+
+import curses as curses
+import time as time
+
 from constants import (
     HORIZONTAL_OFFSET,
     VERTICAL_OFFSET_OF_BOARD,
@@ -11,8 +15,9 @@ from constants import (
     MESSAGE_WAIT,
     VALID_USER_PITS,
 )
-from culations import check_game_over, MancalaBoard, move_rocks, score_game, steal_rocks
+from culations import Culations
 from visuals import (
+    Visuals,
     draw_blank,
     draw_game_over_animation,
     draw_header,
@@ -21,8 +26,15 @@ from visuals import (
     draw_pit_selection,
     draw_text,
 )
-import curses as curses
-import time as time
+
+
+class MancalaBoard(Culations, Visuals):
+    def __init__(self):
+        # basic game state
+        # self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
+        # TODO remove, for testing only
+        self.p_pits = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0]]
+        self.p_store = [0, 0]
 
 
 def main(stdscr):
@@ -47,10 +59,10 @@ def main(stdscr):
         player_turn = 1 - player_turn
         draw_header(stdscr, player_turn)
         run_turn(stdscr, board, player_turn)
-        is_game_over = check_game_over(board)
+        is_game_over = board.check_game_over()
 
     # display game over message
-    p1_score, p2_score = score_game(board)
+    p1_score, p2_score = board.score_game()
     draw_game_over_animation(stdscr, p1_score, p2_score)
 
 
@@ -121,7 +133,7 @@ def run_turn(stdscr, board, player_turn):
                 "Invalid move. Please select a pit with rocks in it.",
                 MESSAGE_WAIT,
             )
-    active_side, active_pit = move_rocks(board, player_turn, pit_selection)
+    active_side, active_pit = board.move_rocks(player_turn, pit_selection)
     draw_mancala_board(stdscr, board, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET)
     # give the player another turn if they landed in their store
     if active_pit == -1:
@@ -135,7 +147,7 @@ def run_turn(stdscr, board, player_turn):
         run_turn(stdscr, board, player_turn)
     # if the active side is the player's, check if a steal occurs
     else:
-        is_steal = steal_rocks(board, active_side, player_turn, active_pit)
+        is_steal = board.steal_rocks(active_side, player_turn, active_pit)
         if is_steal:
             draw_message(
                 stdscr,

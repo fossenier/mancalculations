@@ -13,7 +13,7 @@ VERTICAL_OFFSET_OF_BOARD = 4  # shifts the board down, takes up 7 lines
 VERTICAL_OFFSET_OF_ERROR = 13  # shifts the error message down, takes up 1 line
 VERTICAL_OFFSET_OF_HEADER = 0  # shifts the header down, takes up 2 lines
 VERTICAL_OFFSET_OF_PROMPT = 12  # shifts the prompt down, takes up 1 line
-WIDTH_STORE = 7  # all odd numbers 3 and up, controls the width of the stores
+WIDTH_STORE = 11  # all odd numbers 3 and up, controls the width of the stores
 
 
 # Dependant constants
