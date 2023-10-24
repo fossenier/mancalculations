@@ -16,24 +16,15 @@ from constants import (
     VALID_USER_PITS,
 )
 from culations import Culations
-from visuals import (
-    Visuals,
-    draw_blank,
-    draw_game_over_animation,
-    draw_header,
-    draw_mancala_board,
-    draw_message,
-    draw_pit_selection,
-    draw_text,
-)
+from visuals import Visuals
 
 
 class MancalaBoard(Culations, Visuals):
     def __init__(self):
         # basic game state
-        # self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
+        self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
         # TODO remove, for testing only
-        self.p_pits = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0]]
+        # self.p_pits = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0]]
         self.p_store = [0, 0]
 
 
@@ -52,21 +43,21 @@ def main(stdscr):
     board = MancalaBoard()
     is_game_over = False
     player_turn = 1
-    draw_mancala_board(stdscr, board, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET)
+    board.draw_mancala_board(stdscr, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET)
 
     # main game loop
     while not is_game_over:
         player_turn = 1 - player_turn
-        draw_header(stdscr, player_turn)
+        board.draw_header(stdscr, player_turn)
         run_turn(stdscr, board, player_turn)
         is_game_over = board.check_game_over()
 
     # display game over message
     p1_score, p2_score = board.score_game()
-    draw_game_over_animation(stdscr, p1_score, p2_score)
+    board.draw_game_over_animation(stdscr, p1_score, p2_score)
 
 
-def get_player_move(stdscr):
+def get_player_move(board, stdscr):
     """
     Gets the player's choice of move.
 
@@ -80,16 +71,18 @@ def get_player_move(stdscr):
     pit_selection = -1
     while pit_selection not in VALID_USER_PITS:
         # show cursor and clear previous prompt
-        draw_blank(stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET, 1)
+        board.draw_blank(stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET, 1)
         curses.curs_set(1)
         # get player input
-        input = draw_pit_selection(stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET)
+        input = board.draw_pit_selection(
+            stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET
+        )
         try:
             pit_selection = int(input)
             # display error if number is out of range
             if pit_selection not in VALID_USER_PITS:
-                draw_blank(stdscr, VERTICAL_OFFSET_OF_ERROR, HORIZONTAL_OFFSET, 1)
-                draw_text(
+                board.draw_blank(stdscr, VERTICAL_OFFSET_OF_ERROR, HORIZONTAL_OFFSET, 1)
+                board.draw_text(
                     stdscr,
                     VERTICAL_OFFSET_OF_ERROR,
                     0,
@@ -97,8 +90,8 @@ def get_player_move(stdscr):
                 )
         # display error if input is not a number
         except ValueError:
-            draw_blank(stdscr, VERTICAL_OFFSET_OF_ERROR, HORIZONTAL_OFFSET, 1)
-            draw_text(
+            board.draw_blank(stdscr, VERTICAL_OFFSET_OF_ERROR, HORIZONTAL_OFFSET, 1)
+            board.draw_text(
                 stdscr,
                 VERTICAL_OFFSET_OF_ERROR,
                 0,
@@ -106,7 +99,7 @@ def get_player_move(stdscr):
             )
     # hide cursor and clear prompt and potential error message
     curses.curs_set(0)
-    draw_blank(stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET, 2)
+    board.draw_blank(stdscr, VERTICAL_OFFSET_OF_PROMPT, HORIZONTAL_OFFSET, 2)
     return pit_selection - 1
 
 
@@ -122,11 +115,11 @@ def run_turn(stdscr, board, player_turn):
     is_steal = False
     valid_move = False
     while not valid_move:
-        pit_selection = get_player_move(stdscr)
+        pit_selection = get_player_move(board, stdscr)
         if board.p_pits[player_turn][pit_selection] != 0:
             valid_move = True
         else:
-            draw_message(
+            board.draw_message(
                 stdscr,
                 VERTICAL_OFFSET_OF_PROMPT,
                 HORIZONTAL_OFFSET,
@@ -134,10 +127,10 @@ def run_turn(stdscr, board, player_turn):
                 MESSAGE_WAIT,
             )
     active_side, active_pit = board.move_rocks(player_turn, pit_selection)
-    draw_mancala_board(stdscr, board, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET)
+    board.draw_mancala_board(stdscr, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET)
     # give the player another turn if they landed in their store
     if active_pit == -1:
-        draw_message(
+        board.draw_message(
             stdscr,
             VERTICAL_OFFSET_OF_PROMPT,
             HORIZONTAL_OFFSET,
@@ -149,7 +142,10 @@ def run_turn(stdscr, board, player_turn):
     else:
         is_steal = board.steal_rocks(active_side, player_turn, active_pit)
         if is_steal:
-            draw_message(
+            board.draw_mancala_board(
+                stdscr, VERTICAL_OFFSET_OF_BOARD, HORIZONTAL_OFFSET
+            )
+            board.draw_message(
                 stdscr,
                 VERTICAL_OFFSET_OF_PROMPT,
                 HORIZONTAL_OFFSET,
@@ -157,7 +153,7 @@ def run_turn(stdscr, board, player_turn):
                 MESSAGE_WAIT,
             )
     if not is_steal:
-        draw_message(
+        board.draw_message(
             stdscr,
             VERTICAL_OFFSET_OF_PROMPT,
             HORIZONTAL_OFFSET,
