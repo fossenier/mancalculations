@@ -23,8 +23,6 @@ class MancalaBoard(Culations, Visuals):
     def __init__(self):
         # basic game state
         self.p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
-        # TODO remove, for testing only
-        # self.p_pits = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0]]
         self.p_store = [0, 0]
 
 

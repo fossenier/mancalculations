@@ -36,26 +36,24 @@ class Culations:
             `player_turn` (`integer`): Most recent active player's side of the board.\n
             `pit_selection` (`integer`): Most recent active pit.
         """
-        # track active side of the board, pick up rocks from selected pit
+        rock_count = self.p_pits[player_turn][pit_selection]
+        self.p_pits[player_turn][pit_selection] = 0
+        # keep track of which side of the board we are placing rocks on
         active_player = player_turn
-        rock_count, self.p_pits[active_player][pit_selection] = (
-            self.p_pits[active_player][pit_selection],
-            0,
-        )
-        # move rocks from selected pit
+
+        # put down all picked up rocks one by one
         while rock_count > 0:
             pit_selection += 1
+            # handle hitting the end of the board
             if pit_selection == PLAYER_PIT_COUNT:
-                # add to store if the active side matches the player's turn
                 if active_player == player_turn:
                     self.p_store[active_player] += 1
-                    rock_count -= 1
                 # switch active side of the board, reset pit selection
                 active_player = 1 - active_player
                 pit_selection = -1
             else:
                 self.p_pits[active_player][pit_selection] += 1
-                rock_count -= 1
+            rock_count -= 1
         return active_player, pit_selection
 
     def score_game(self):
