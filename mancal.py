@@ -28,7 +28,7 @@ class MancalaBoard(Culations, Visuals):
 
 def main(stdscr):
     """
-    Runs a game of Manncala for the user.
+    Runs a game of Mancala for the user.
 
     Args:
         `stdscr` (`stdscr`): Cureses main window.
