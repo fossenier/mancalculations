@@ -1,5 +1,6 @@
 """
 Handles the rules and logic of the game Mancala.
+The human is the max player and the AI is the min player.
 """
 
 from copy import deepcopy
@@ -48,6 +49,36 @@ class Mancala(object):
         new_board = deepcopy(self)
         new_board.__move_rocks(action)
         return new_board
+
+    def winner(self) -> int:
+        """
+        Returns the winner of the game.
+        0 for human, 1 for AI, -1 for a tie.
+        None if the game is not over.
+        """
+        # there are still rocks in play
+        if len(self.actions()) > 0:
+            return None
+        
+        if self.__p_store[TURN_HUMAN] > self.__p_store[TURN_AI]:
+            return TURN_HUMAN
+        elif self.__p_store[TURN_AI] > self.__p_store[TURN_HUMAN]:
+            return TURN_AI
+        else:
+            return -1
+    
+    def terminal(self) -> bool:
+        """
+        Returns True if the game is over.
+        """
+        return self.winner() is not None
+    
+    def utility(self) -> int:
+        """
+        Returns the utility of the game as the difference in stones scored.
+        Positive for human, negative for AI, 0 for a tie.
+        """
+        return self.__p_store[TURN_HUMAN] - self.__p_store[TURN_AI]
 
     def __move_rocks(self, action: int) -> str:
         """
