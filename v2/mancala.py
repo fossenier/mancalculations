@@ -155,7 +155,7 @@ class Mancala(object):
         while rocks > 0:
             action += 1
             # at the end of the board
-            if action == PLAYER_PIT_COUNT:
+            if action >= PLAYER_PIT_COUNT:
                 # score a point if the last rock lands in the player's store
                 if active_side == self.__p_turn:
                     self.__p_store[self.__p_turn] += 1
@@ -179,6 +179,7 @@ class Mancala(object):
         elif (
             self.__p_pits[self.__p_turn][action] == 1
             and self.__p_pits[1 - self.__p_turn][opposite_pit] != 0
+            and active_side == self.__p_turn
         ):
 
             self.__p_store[self.__p_turn] += self.__p_pits[1 - self.__p_turn][
