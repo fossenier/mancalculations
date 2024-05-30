@@ -6,7 +6,7 @@ The human is the max player and the AI is the min player.
 from copy import deepcopy
 from typing import List, Tuple
 
-MAX_DEPTH = 5
+MAX_DEPTH = 11
 PLAYER_PIT_COUNT = 6
 TURN_HUMAN = 0
 TURN_AI = 1
@@ -80,6 +80,10 @@ class Mancala(object):
         Returns the utility of the game as the difference in stones scored.
         Positive for human, negative for AI, 0 for a tie.
         """
+        # if there are no actions, add to the score the stones on the board
+        if self.terminal():
+            self.__p_store[TURN_HUMAN] += sum(self.__p_pits[TURN_HUMAN])
+            self.__p_store[TURN_AI] += sum(self.__p_pits[TURN_AI])
         return self.__p_store[TURN_HUMAN] - self.__p_store[TURN_AI]
 
     def minimax(self) -> int:
@@ -191,3 +195,22 @@ class Mancala(object):
             # update turn
             self.__p_turn = 1 - self.__p_turn
             return "switch"
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the current game state, emphasizing the circular arrangement.
+        """
+        # Assuming __p_pits is a list of lists where each sublist represents the pits for a player
+        # and __p_store is a list of integers representing the store for each player
+        pits_row1 = " ".join(f"{pit:02d}" for pit in self.__p_pits[0])
+        pits_row2 = " ".join(
+            f"{pit:02d}" for pit in self.__p_pits[1][::-1]
+        )  # Reverse for visual alignment
+
+        # Prepare the store and pits layout
+        board_representation = (
+            f"     {pits_row2}\n"
+            f"{self.__p_store[1]:02d}                      {self.__p_store[0]:02d}\n"
+            f"     {pits_row1}"
+        )
+        return board_representation
