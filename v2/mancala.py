@@ -6,7 +6,11 @@ The human is the max player and the AI is the min player.
 from copy import deepcopy
 from typing import List, Tuple
 
-MAX_DEPTH = 11
+# time taken on the first move
+# 14 -> 2:59
+# 13 -> 1:08
+# 12 -> 0:22
+MAX_DEPTH = 12
 PLAYER_PIT_COUNT = 6
 TURN_HUMAN = 0
 TURN_AI = 1
@@ -16,7 +20,7 @@ class Mancala(object):
     def __init__(self) -> None:
         self.__p_pits = [[4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4]]
         self.__p_store = [0, 0]
-        self.__p_turn = TURN_HUMAN
+        self.__p_turn = TURN_AI
 
     def p_turn(self, turn: int = None) -> int:
         """

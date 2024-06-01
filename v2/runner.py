@@ -12,7 +12,7 @@ def main():
     # setup initial game state
     board = Mancala()
     is_game_over = False
-    player_turn = TURN_HUMAN
+    player_turn = board.p_turn()
 
     # main game loop
     while not is_game_over:
