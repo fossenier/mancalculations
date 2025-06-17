@@ -5,6 +5,7 @@ The human is the max player and the AI is the min player.
 
 from copy import deepcopy
 from typing import List, Tuple
+from typing import Optional
 
 # time taken on the first move
 # 14 -> 2:59
@@ -22,7 +23,7 @@ class Mancala(object):
         self.__p_store = [0, 0]
         self.__p_turn = TURN_AI
 
-    def p_turn(self, turn: int = None) -> int:
+    def p_turn(self, turn: Optional[int] = None) -> int:
         """
         Updates the current player turn if a value is provided.
         Otherwise, returns the current player turn.
@@ -32,8 +33,8 @@ class Mancala(object):
         if turn is not None:
             if turn not in [TURN_HUMAN, TURN_AI]:
                 raise ValueError("Invalid turn value.")
-        else:
-            return self.__p_turn
+            self.__p_turn = turn
+        return self.__p_turn
 
     def actions(self) -> List[int]:
         """
@@ -56,7 +57,7 @@ class Mancala(object):
         new_board.__move_rocks(action)
         return new_board
 
-    def winner(self) -> int:
+    def winner(self) -> Optional[int]:
         """
         Returns the winner of the game.
         0 for human, 1 for AI, -1 for a tie.
@@ -96,8 +97,8 @@ class Mancala(object):
         """
 
         def recursive_minimax(
-            board: "Mancala", depth: int, alpha: int, beta: int
-        ) -> Tuple[int, int]:
+            board: "Mancala", depth: int, alpha: float, beta: float
+        ) -> Tuple[Optional[float], Optional[int]]:
             """
             Uses minimax with alpha-beta pruning to determine the best move and utility for the current player,
             assuming optimal play.
@@ -113,6 +114,9 @@ class Mancala(object):
             for action in board.actions():
                 new_board = board.result(action)
                 value, _ = recursive_minimax(new_board, depth + 1, alpha, beta)
+
+                if value is None or optimal_value is None:
+                    continue
 
                 if board.p_turn() == TURN_HUMAN:
                     if value > optimal_value:
@@ -131,7 +135,10 @@ class Mancala(object):
             return optimal_value, best_action
 
         # Start the recursion with initial values of alpha and beta
-        return recursive_minimax(self, 0, float("-inf"), float("inf"))[1]
+        action = recursive_minimax(self, 0, float("-inf"), float("inf"))[1]
+        if action is None:
+            raise RuntimeError("No valid action found by minimax.")
+        return action
 
     def __move_rocks(self, action: int) -> str:
         """
