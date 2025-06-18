@@ -4,6 +4,7 @@ Includes tournament play, benchmarking, and performance analysis
 """
 
 import numpy as np
+import numpy.typing as npt
 import torch
 from typing import Dict, List, Tuple, Optional
 import logging
@@ -48,30 +49,58 @@ class MinimaxPlayer:
     def _minimax(
         self, game: KalahGame, depth: int, alpha: float, beta: float, maximizing: bool
     ) -> Tuple[float, int]:
-        """Minimax with alpha-beta pruning"""
+        """
+        Implements the Minimax algorithm with alpha-beta pruning for the Kalah game.
+        This recursive function evaluates the best possible move for the current player
+        by simulating all possible moves up to a given depth, alternating between maximizing
+        and minimizing players. Alpha-beta pruning is used to eliminate branches that cannot
+        possibly affect the final decision, improving efficiency.
+        Args:
+            game (KalahGame): The current state of the Kalah game.
+            depth (int): The maximum depth to search in the game tree.
+            alpha (float): The best value that the maximizing player can guarantee so far.
+            beta (float): The best value that the minimizing player can guarantee so far.
+            maximizing (bool): True if the current player is the maximizing player, False otherwise.
+        Returns:
+            Tuple[float, int]: A tuple containing the evaluation score and the best action (move index).
+                The score is positive if favorable for the maximizing player, negative otherwise.
+                The action is the index of the best move, or -1 if at a terminal node.
+        """
+
         self.nodes_evaluated += 1
 
         # Terminal node
         if game.game_over or depth == 0:
-            return self._evaluate(game), -1
+            evaluation = self._evaluate(game)
+            # Positive values indicate a favourable evaluation, must negate for
+            # minimizing player
+            if maximizing:
+                return evaluation, -1
+            else:
+                return -evaluation, -1
 
         valid_moves = game.get_valid_moves()
-        valid_actions = np.where(valid_moves)[0]
+        # Extracts array of indices where valid_moves is True (AKA the valid actions [0-5])
+        valid_actions: npt.NDArray[np.intp] = np.where(valid_moves)[0]
 
         if maximizing:
             max_eval = -float("inf")
-            best_action = valid_actions[0]
+            best_action: int = valid_actions[0]
 
+            action: int  # np.intp
             for action in valid_actions:
                 game_copy = game.clone()
                 extra_turn = game_copy.make_move(action)
 
-                # Handle extra turns
-                if extra_turn and not game_copy.game_over:
-                    eval_score, _ = self._minimax(game_copy, depth, alpha, beta, True)
+                # Same player goes again if they land in their own store, AND ALSO at
+                # the end of the game, so that scoring happens right
+                if extra_turn or game_copy.game_over:
+                    eval_score, _ = self._minimax(
+                        game_copy, depth - 1, alpha, beta, maximizing
+                    )
                 else:
                     eval_score, _ = self._minimax(
-                        game_copy, depth - 1, alpha, beta, False
+                        game_copy, depth - 1, alpha, beta, not maximizing
                     )
 
                 if eval_score > max_eval:
@@ -85,18 +114,22 @@ class MinimaxPlayer:
             return max_eval, best_action
         else:
             min_eval = float("inf")
-            best_action = valid_actions[0]
+            best_action: int = valid_actions[0]
 
+            action: int  # np.intp
             for action in valid_actions:
                 game_copy = game.clone()
                 extra_turn = game_copy.make_move(action)
 
-                # Handle extra turns
-                if extra_turn and not game_copy.game_over:
-                    eval_score, _ = self._minimax(game_copy, depth, alpha, beta, False)
+                # Same player goes again if they land in their own store, AND ALSO at
+                # the end of the game, so that scoring happens right
+                if extra_turn or game_copy.game_over:
+                    eval_score, _ = self._minimax(
+                        game_copy, depth, alpha, beta, maximizing
+                    )
                 else:
                     eval_score, _ = self._minimax(
-                        game_copy, depth - 1, alpha, beta, True
+                        game_copy, depth - 1, alpha, beta, not maximizing
                     )
 
                 if eval_score < min_eval:
@@ -110,10 +143,22 @@ class MinimaxPlayer:
             return min_eval, best_action
 
     def _evaluate(self, game: KalahGame) -> float:
-        """Evaluate game position"""
+        """
+        Evaluates the current state of the Kalah game from the perspective of the active player.
+
+        If the game is over, returns a boosted reward value for a true victory.
+        Otherwise, returns a heuristic evaluation based on the difference in stones.
+
+        Args:
+            game (KalahGame): The current game state to evaluate.
+
+        Returns:
+            float: The evaluation score for the active player's position.
+        """
+        # The better the active player's position, the higher the evaluation
         if game.game_over:
-            # Use actual game outcome
-            return game.get_reward(0) * 100  # Scale for better distinction
+            # Return a boosted value for true victory
+            return game.get_reward() * 100
         else:
             # Heuristic evaluation: stone difference
             return game.get_score_difference()

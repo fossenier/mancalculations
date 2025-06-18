@@ -96,7 +96,9 @@ class SelfPlayWorker:
             )
 
             # Select action
-            action = np.random.choice(6, p=action_probs)
+            action = -1
+            while action not in valid_moves:
+                action = np.random.choice(6, replace=False, p=action_probs)
 
             # Make move
             extra_turn = game.make_move(action)
@@ -173,6 +175,9 @@ class SelfPlayManager:
 
         # Use multiprocessing pool to parallelize work
         with mp.Pool(num_workers) as pool:
+            self.logger.info(
+                "Starting self-play workers..."
+            )  # This only runs once for 64 threads
             results = pool.map(run_self_play_worker, worker_args)
 
         # Flatten all experiences
