@@ -4,30 +4,65 @@ Optimized for the game's variable-length turns and tactical nature
 """
 
 import numpy as np
+import numpy.typing as npt
 import math
 from typing import Dict, Optional, Tuple
 from collections import defaultdict
 import threading
+from kalah_game import KalahGame
 
 
 class MCTSNode:
     """Node in the MCTS tree"""
 
-    def __init__(self, prior: float = 0.0):
+    def __init__(self, prior: float = 0.0) -> None:
+        """
+        Initializes a new instance of the class.
+
+        Args:
+            prior (float, optional): The prior probability or value associated with this node. Defaults to 0.0.
+
+        Attributes:
+            visit_count (int): The number of times this node has been visited.
+            value_sum (float): The cumulative value from all visits to this node.
+            prior (float): The prior probability or value for this node.
+            children (dict): A dictionary mapping actions to child nodes.
+            virtual_loss (int): The virtual loss used for parallelization in MCTS.
+        """
         self.visit_count = 0
         self.value_sum = 0.0
         self.prior = prior
+        self.current_player = None
         self.children = {}
         self.virtual_loss = 0
 
     def value(self) -> float:
-        """Average value of this node"""
+        """
+        Calculates and returns the average value of the node.
+
+        Returns:
+            float: The average value (value_sum divided by visit_count) if visit_count is greater than 0,
+                   otherwise 0.0.
+        """
         if self.visit_count == 0:
             return 0.0
         return self.value_sum / self.visit_count
 
     def ucb_score(self, parent_visits: int, c_puct: float) -> float:
-        """Calculate UCB score for node selection"""
+        """
+        Calculates the Upper Confidence Bound (UCB) score for a node in Monte Carlo Tree Search (MCTS).
+
+        The UCB score balances exploitation (the node's current value estimate) and
+        exploration (the potential for discovering better outcomes). Unvisited nodes
+        are prioritized by returning a high exploration value.
+
+        Args:
+            parent_visits (int): The total number of visits to the parent node.
+            c_puct (float): The exploration constant that controls the balance between exploration and exploitation.
+
+        Returns:
+            float: The computed UCB score for the node.
+        """
         if self.visit_count == 0:
             # Avoid division by zero, prioritize unvisited nodes
             return c_puct * self.prior * math.sqrt(parent_visits)
@@ -40,7 +75,12 @@ class MCTSNode:
         return exploitation + exploration
 
     def is_expanded(self) -> bool:
-        """Check if node has been expanded"""
+        """
+        Checks if the current node has been expanded.
+
+        Returns:
+            bool: True if the node has one or more child nodes, False otherwise.
+        """
         return len(self.children) > 0
 
 
@@ -56,7 +96,9 @@ class MCTS:
         self.nodes = {}
         self.lock = threading.Lock()
 
-    def search(self, game, root_state: Optional[str] = None) -> np.ndarray:
+    def search(
+        self, game: KalahGame, root_state: Optional[str] = None
+    ) -> npt.NDArray[np.float64]:
         """
         Run MCTS simulations and return visit counts as action probabilities
         Args:
@@ -73,6 +115,7 @@ class MCTS:
             self._expand_node(game, root_state)
 
         root_node = self.nodes[root_state]
+        root_node.current_player = game.current_player
         valid_moves = game.get_valid_moves()
 
         # Add Dirichlet noise to root prior
@@ -98,39 +141,73 @@ class MCTS:
         return visits
 
     def _simulate(self, game, root_state: str) -> float:
-        """Run a single MCTS simulation"""
+        """
+        Simulates a single Monte Carlo Tree Search (MCTS) rollout from the given root state.
+
+        This method performs the following MCTS phases:
+        1. Selection: Traverses the tree from the root state, selecting child
+        nodes according to the tree policy, until a leaf node is reached.
+        2. Expansion: Expands the leaf node by adding its children to the tree if
+        it has not been expanded yet.
+        3. Evaluation: Evaluates the leaf node using either the actual game outcome
+        (if the game is over) or a neural network prediction.
+        4. Backup: Propagates the evaluation result back up the path taken during
+        selection, updating statistics for each node.
+
+        Args:
+            game: The game environment, which must provide methods for checking game over, getting valid moves, applying moves, and evaluating the state.
+            root_state (str): The string representation of the root state from which to start the simulation.
+
+        Returns:
+            float: The value of the simulation from the perspective of the current player at the root state.
+        """
         path = []
         current_state = root_state
 
         # Selection phase - traverse tree until leaf
-        while not game.game_over:
+        while True:
             if current_state not in self.nodes:
-                # Expansion phase - expand leaf node
                 self._expand_node(game, current_state)
                 break
 
             node = self.nodes[current_state]
+            node.current_player = game.current_player
 
-            # Check if we need to expand
+            # Check if game is over BEFORE trying to expand or select
+            if game.game_over:
+                break
+
             valid_moves = game.get_valid_moves()
             if not node.is_expanded():
                 self._expand_node(game, current_state)
                 break
 
-            # Select best action
+            # Check if any valid moves exist
+            if not np.any(valid_moves):
+                break
+
             action = self._select_action(node, valid_moves)
             if action is None:
                 break
 
-            # Apply virtual loss
             with self.lock:
                 node.children[action].virtual_loss += 1
 
-            path.append((current_state, action))
+            path.append(
+                (current_state, action, game.current_player)
+            )  # Store player explicitly
 
-            # Make move
+            # Make move and check for extra turn
             extra_turn = game.make_move(action)
             current_state = self._state_key(game)
+
+            # Handle extra turns by continuing with same player context
+            if extra_turn and not game.game_over:
+                continue  # Don't alternate player expectation
+
+            # Check game over after move
+            if game.game_over:
+                break
 
         # Evaluation phase
         if game.game_over:
@@ -142,12 +219,27 @@ class MCTS:
             _, value = self.network.predict(state)
 
         # Backup phase - propagate value up the tree
-        self._backup(path, value, game.current_player)
+        self._backup(path, value)
 
         return value
 
-    def _expand_node(self, game, state_key: str):
-        """Expand a leaf node by adding all valid actions"""
+    def _expand_node(self, game: KalahGame, state_key: str) -> None:
+        """
+        Expands a node in the MCTS tree for the given game state.
+
+        If the node corresponding to `state_key` already exists in the tree, the
+        method returns immediately. Otherwise, it uses the neural network to predict
+        the policy (action probabilities) and value for the current canonical game
+        state. The policy is masked to zero out invalid moves and renormalized. If
+        all moves are invalid according to the policy, valid moves are assigned
+        equal probability. A new MCTSNode is created, and for each valid action,
+        a child node is initialized with the corresponding prior probability. Finally,
+        the new node is added to the tree in a thread-safe manner.
+
+        Args:
+            game: The game environment providing state and move information.
+            state_key (str): A unique key representing the current game state.
+        """
         if state_key in self.nodes:
             return
 
@@ -173,10 +265,23 @@ class MCTS:
                 node.children[action] = MCTSNode(prior=policy[action])
 
         with self.lock:
-            self.nodes[state_key] = node
+            if state_key not in self.nodes:
+                self.nodes[state_key] = node
 
-    def _select_action(self, node: MCTSNode, valid_moves: np.ndarray) -> Optional[int]:
-        """Select action using PUCT formula"""
+    def _select_action(
+        self, node: MCTSNode, valid_moves: npt.NDArray[np.bool_]
+    ) -> Optional[int]:
+        """
+        Selects the best action from the given node based on the UCB (Upper Confidence Bound)
+        score, considering only valid moves and accounting for virtual loss.
+
+        Args:
+            node (MCTSNode): The current node in the Monte Carlo Tree Search.
+            valid_moves (np.ndarray): A boolean or integer array indicating which moves are valid (typically of length 6).
+
+        Returns:
+            Optional[int]: The index of the best action to take, or None if no valid action is found.
+        """
         best_score = -float("inf")
         best_action = None
 
@@ -199,57 +304,85 @@ class MCTS:
 
         return best_action
 
-    def _backup(self, path: list, value: float, final_player: int):
-        """Backup value through the path"""
-        current_player = final_player
+    def _backup(self, path: list, value: float) -> None:
+        """
+        Propagates the simulation result back through the path of visited nodes, updating visit counts and value sums.
 
-        for state_key, action in reversed(path):
+        Args:
+            path (list): A list of (state_key, action) tuples representing the sequence of nodes and actions taken during the simulation.
+            value (float): The simulation result to be backed up, typically from the perspective of the final player.
+
+        Notes:
+            - Increments visit counts for each node and child along the path.
+            - Adjusts virtual loss for each child node.
+            - Updates value sums based on whether the child node's current player matches the final player.
+        """
+        # Get the final player from the last node in the path
+        final_state_key = path[-1][0] if path else None
+        final_player = (
+            self.nodes[final_state_key].current_player if final_state_key else None
+        )
+
+        for state_key, action, _ in reversed(path):
             node = self.nodes[state_key]
             child = node.children[action]
 
-            # Update with lock for thread safety
             with self.lock:
                 child.visit_count += 1
-                child.virtual_loss -= 1
+                child.virtual_loss = max(0, child.virtual_loss - 1)
 
-                # Negate value for opponent
-                if current_player != final_player:
-                    child.value_sum -= value
-                else:
-                    child.value_sum += value
-
-                # Update parent node visit count
+                # Value from perspective of the player who made this move
+                # The child node's current_player is who benefits from this move's outcome
+                node_value = value if child.current_player == final_player else -value
+                child.value_sum += node_value
                 node.visit_count += 1
 
-            # Switch player (may not alternate due to extra turns)
-            current_player = 1 - current_player
+    def _state_key(self, game: KalahGame) -> str:
+        """
+        Generate a unique string key representing the current state of the game.
 
-    def _state_key(self, game) -> str:
-        """Generate unique key for game state"""
-        return f"{game.current_player}:{game.board.tobytes().hex()}"
+        The key is composed of the current player's identifier and a hexadecimal
+        representation of the canonical game state. This is useful for hashing or
+        caching game states in algorithms such as Monte Carlo Tree Search (MCTS).
 
-    def clear_tree(self):
-        """Clear the search tree"""
+        Args:
+            game (KalahGame): The current game instance.
+
+        Returns:
+            str: A unique string key for the given game state.
+        """
+        return f"{game.current_player}:{game.get_canonical_state().tobytes().hex()}"
+
+    def clear_tree(self) -> None:
+        """
+        Clears all nodes from the MCTS tree in a thread-safe manner.
+
+        This method acquires a lock to ensure that the operation is safe in multi-threaded environments,
+        then removes all nodes from the internal node storage.
+        """
         with self.lock:
             self.nodes.clear()
 
-    def get_action_probabilities(self, game, temperature: float = 1.0) -> np.ndarray:
+    def get_action_probabilities(
+        self, game: KalahGame, temperature: float = 1.0
+    ) -> npt.NDArray[np.float64]:
         """
-        Get action probabilities for current position
+        Calculates the probability distribution over actions based on visit counts from MCTS search.
         Args:
-            game: Current game state
-            temperature: Temperature for controlling exploration
+            game (KalahGame): The current game state for which to compute action probabilities.
+            temperature (float, optional): Controls the level of exploration. A value close to 0 selects the most visited action deterministically, while higher values increase exploration. Defaults to 1.0.
         Returns:
-            Action probabilities
+            npt.NDArray[np.float64]: A probability distribution over possible actions, summing to 1.0.
         """
         visits = self.search(game)
 
-        if temperature == 0:
-            # Greedy selection
+        # Add small constant to avoid zero division
+        visits = visits + 1e-8
+
+        if temperature == 0 or temperature < 1e-8:
             probs = np.zeros_like(visits)
             probs[np.argmax(visits)] = 1.0
         else:
-            # Apply temperature
             visits_temp = np.power(visits, 1.0 / temperature)
             probs = visits_temp / np.sum(visits_temp)
 

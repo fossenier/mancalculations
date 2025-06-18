@@ -6,7 +6,7 @@ Includes tournament play, benchmarking, and performance analysis
 import numpy as np
 import numpy.typing as npt
 import torch
-from typing import Dict, Literal, Tuple, Optional, Any
+from typing import Dict, Tuple, Optional, Any
 import logging
 from datetime import datetime
 import json
