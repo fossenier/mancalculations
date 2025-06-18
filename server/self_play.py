@@ -4,8 +4,10 @@ Runs parallel CPU processes to generate training data
 """
 
 import numpy as np
+import numpy.typing as npt
 import multiprocessing as mp
 from typing import List, Tuple, Optional
+
 import logging
 import time
 from collections import deque
@@ -24,7 +26,17 @@ class SelfPlayWorker:
 
     def __init__(
         self, worker_id: int, config: AlphaZeroConfig, model_path: Optional[str] = None
-    ):
+    ) -> None:
+        """
+        Initializes a SelfPlayWorker instance.
+
+        Args:
+            worker_id (int): Unique identifier for the worker.
+            config (AlphaZeroConfig): Configuration object containing parameters for AlphaZero.
+            model_path (Optional[str], optional): Path to the pre-trained model file. Defaults to None.
+
+        Sets up logging, loads the neural network model, and initializes the Monte Carlo Tree Search (MCTS) engine.
+        """
         self.worker_id = worker_id
         self.config = config
         self.model_path = model_path
@@ -41,7 +53,13 @@ class SelfPlayWorker:
         self.mcts = MCTS(config, self.network)
 
     def _load_model(self) -> KalahNetwork:
-        """Load neural network model"""
+        """
+        Loads a KalahNetwork model from the specified file path if it exists;
+        otherwise, initializes a new model with random weights.
+
+        Returns:
+            KalahNetwork: The loaded or newly initialized KalahNetwork model in evaluation mode.
+        """
         network = KalahNetwork(self.config)
 
         if self.model_path and os.path.exists(self.model_path):
@@ -54,10 +72,23 @@ class SelfPlayWorker:
         network.eval()
         return network
 
-    def play_game(self) -> List[Tuple[np.ndarray, np.ndarray, float]]:
+    def play_game(
+        self,
+    ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
         """
-        Play a single self-play game
-        Returns list of (state, policy, value) tuples
+        Plays a single self-play game of Kalah using Monte Carlo Tree Search (MCTS) and returns the collected experiences.
+
+        The method simulates a game between two agents, using MCTS to select moves according to a temperature schedule.
+        Each move's state, action probabilities, and player are recorded as experiences. At the end of the game, each
+        experience is labeled with the final game outcome from the perspective of the player who made the move.
+
+        Returns:
+            List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+                A list of tuples, each containing:
+                    - The canonical state (numpy array) at the time of the move,
+                    - The action probability distribution (numpy array) used to select the move,
+                    - The game outcome (float) from the perspective of the player who made the move.
+                If the game ends normally, the outcome is the actual reward; if the game hits the maximum length, the outcome is 0.0 (draw).
         """
         game = KalahGame()
         experiences = []
@@ -84,11 +115,22 @@ class SelfPlayWorker:
             if temperature == 0:
                 # Greedy selection
                 action_probs = np.zeros(6)
-                action_probs[np.argmax(visits)] = 1.0
+                # Mask invalid moves by setting their visit counts to -inf
+                masked_visits = np.copy(visits)
+                masked_visits[np.logical_not(valid_moves)] = -np.inf
+                action_probs[np.argmax(masked_visits)] = 1.0
             else:
-                # Apply temperature
-                visits_temp = np.power(visits, 1.0 / temperature)
-                action_probs = visits_temp / np.sum(visits_temp)
+                # Apply temperature, mask invalid moves
+                visits_temp = np.zeros(6)
+                visits_temp[valid_moves] = np.power(
+                    visits[valid_moves], 1.0 / temperature
+                )
+                if np.sum(visits_temp) > 0:
+                    action_probs = visits_temp / np.sum(visits_temp)
+                else:
+                    # If all visits are zero (shouldn't happen), pick uniform over valid moves
+                    action_probs = np.zeros(6)
+                    action_probs[valid_moves] = 1.0 / np.sum(valid_moves)
 
             # Store experience (will be labeled with game outcome later)
             experiences.append(
@@ -96,13 +138,19 @@ class SelfPlayWorker:
             )
 
             # Select action
-            action = -1
-            while action not in valid_moves:
-                action = np.random.choice(6, replace=False, p=action_probs)
+            action_probs = action_probs / np.sum(action_probs)
+            action = np.random.choice(6, p=action_probs)
+
+            # Add this check:
+            if not valid_moves[action]:
+                print(f"ERROR: Selected invalid action {action}")
+                print(f"Valid moves: {valid_moves}")
+                print(f"Action probs: {action_probs}")
+                # Force select from valid moves
+                action = np.random.choice(np.where(valid_moves)[0])
 
             # Make move
             extra_turn = game.make_move(action)
-            move_count += 1
 
             # Clear MCTS tree periodically to save memory
             if move_count % 10 == 0:
@@ -121,8 +169,22 @@ class SelfPlayWorker:
             # Game hit max length, declare draw
             return [(state, policy, 0.0) for state, policy, _ in experiences]
 
-    def run(self, num_games: int) -> List[Tuple[np.ndarray, np.ndarray, float]]:
-        """Generate multiple self-play games"""
+    def run(
+        self, num_games: int
+    ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+        """
+        Runs a specified number of self-play games, collecting and returning experiences from each game.
+        Args:
+            num_games (int): The number of games to play.
+        Returns:
+            List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+                A list of experiences collected from all games. Each experience is a tuple containing:
+                    - State (npt.NDArray[np.float64])
+                    - Action (npt.NDArray[np.float64])
+                    - Reward (float)
+        Logs progress every 10 games, including the number of games played, total experiences collected, and time taken per game.
+        """
+
         all_experiences = []
 
         for game_num in range(num_games):
@@ -143,7 +205,26 @@ class SelfPlayWorker:
         return all_experiences
 
 
-def run_self_play_worker(args):
+def run_self_play_worker(
+    args: tuple,
+) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+    """
+    Runs a self-play worker to generate game data.
+
+    Args:
+        args (tuple): A tuple containing:
+            - worker_id (int): The unique identifier for the worker.
+            - config (Any): Configuration object for the self-play worker.
+            - model_path (str): Path to the model to be used for self-play.
+            - num_games (int): Number of games to run.
+
+    Returns:
+        List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+            A list of tuples, each containing:
+                - The state array (np.ndarray of float64)
+                - The policy array (np.ndarray of float64)
+                - The value (float) for each game played.
+    """
     worker_id, config, model_path, num_games = args
     worker = SelfPlayWorker(worker_id, config, model_path)
     return worker.run(num_games)
@@ -153,13 +234,40 @@ class SelfPlayManager:
     """Manages parallel self-play game generation"""
 
     def __init__(self, config: AlphaZeroConfig):
+        """
+        Initializes the SelfPlayManager with the given AlphaZero configuration.
+
+        Args:
+            config (AlphaZeroConfig): The configuration object containing parameters for AlphaZero.
+
+        Attributes:
+            config (AlphaZeroConfig): Stores the provided AlphaZero configuration.
+            logger (logging.Logger): Logger instance for the SelfPlayManager class.
+        """
         self.config = config
         self.logger = logging.getLogger("SelfPlayManager")
 
     def generate_games(
         self, model_path: Optional[str] = None
-    ) -> List[Tuple[np.ndarray, np.ndarray, float]]:
-        """Generate self-play games using multiple CPU workers"""
+    ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+        """
+        Generates self-play game experiences in parallel using multiple worker processes.
+
+        Args:
+            model_path (Optional[str], optional): Path to the model to be used for self-play. If None, uses the default model. Defaults to None.
+
+        Returns:
+            List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+                A shuffled list of experiences generated from all workers. Each experience is a tuple containing:
+                    - state (npt.NDArray[np.float64]): The game state.
+                    - policy (npt.NDArray[np.float64]): The policy probabilities.
+                    - value (float): The value estimate for the state.
+
+        Logs:
+            - Number of workers and total games to be generated.
+            - When self-play workers start.
+            - Total number of experiences generated.
+        """
         num_workers = self.config.self_play.num_workers
         games_per_worker = self.config.self_play.games_per_worker
 
@@ -190,9 +298,27 @@ class SelfPlayManager:
         return all_experiences
 
     def save_experiences(
-        self, experiences: List[Tuple[np.ndarray, np.ndarray, float]], iteration: int
-    ):
-        """Save experiences to disk"""
+        self,
+        experiences: List[
+            Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]
+        ],
+        iteration: int,
+    ) -> None:
+        """
+        Saves a list of experience tuples to disk as a pickle file.
+
+        Each experience is a tuple containing two NumPy arrays (state and action representations)
+        and a float (reward). The experiences are saved to a file named according to the given
+        iteration number in the configured data directory.
+
+        Args:
+            experiences (List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]):
+                A list of experience tuples to be saved.
+            iteration (int): The current iteration number, used to name the output file.
+
+        Returns:
+            None
+        """
         filename = os.path.join(
             self.config.system.data_dir, f"experiences_iter{iteration}.pkl"
         )
@@ -204,8 +330,23 @@ class SelfPlayManager:
 
     def load_experiences(
         self, iteration: int
-    ) -> List[Tuple[np.ndarray, np.ndarray, float]]:
-        """Load experiences from disk"""
+    ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+        """
+        Loads experience tuples from a pickle file for a given training iteration.
+
+        Args:
+            iteration (int): The iteration number whose experiences should be loaded.
+
+        Returns:
+            List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
+                A list of experience tuples, where each tuple contains:
+                    - state (np.ndarray): The state representation as a NumPy array of floats.
+                    - action (np.ndarray): The action representation as a NumPy array of floats.
+                    - reward (float): The reward value associated with the experience.
+
+        Logs:
+            The number of loaded experiences and the filename they were loaded from.
+        """
         filename = os.path.join(
             self.config.system.data_dir, f"experiences_iter{iteration}.pkl"
         )

@@ -11,7 +11,7 @@ from typing import List, Optional
 class ModelConfig:
     """Neural network architecture configuration"""
 
-    input_dim: int = 14  # 12 pits + 2 stores
+    input_dim: int = 12  # 12 pits
     embedding_dim: int = 128
     num_residual_blocks: int = 20  # 15-25 recommended
     num_filters: int = 256  # 256-512 recommended
