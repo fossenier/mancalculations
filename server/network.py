@@ -1,13 +1,13 @@
 """
 Neural network architecture for Kalah AlphaZero
-Implements 1D CNN with residual blocks and dual heads
+Optimized for GPU batch inference
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 class ResidualBlock1D(nn.Module):
@@ -41,12 +41,15 @@ class ResidualBlock1D(nn.Module):
 class KalahNetwork(nn.Module):
     """
     AlphaZero network for Kalah
-    Uses 1D CNN backbone with dual heads for policy and value
+    Optimized for GPU batch inference
     """
 
-    def __init__(self, config):
+    def __init__(self, config, device: Optional[str] = None):
         super().__init__()
         self.config = config
+        self.device = (
+            device if device else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
         # Input embedding layer
         self.embedding = nn.Linear(config.model.input_dim, config.model.embedding_dim)
@@ -69,10 +72,6 @@ class KalahNetwork(nn.Module):
         self.global_pool_channels = config.model.num_filters * 2  # Max + Avg pool
 
         # Dense layers
-        # self.fc1 = nn.Linear(
-        #     self.global_pool_channels * config.model.embedding_dim, 256
-        # )
-        # Chat GPT fix:
         self.fc1 = nn.Linear(self.global_pool_channels, 256)
         self.fc2 = nn.Linear(256, 128)
 
@@ -91,6 +90,14 @@ class KalahNetwork(nn.Module):
 
         # Initialize weights
         self._initialize_weights()
+
+        # Move to device and set to eval mode
+        self.to(self.device)
+        self.eval()
+
+        # Disable gradient computation for inference
+        for param in self.parameters():
+            param.requires_grad = False
 
     def _initialize_weights(self):
         """Initialize network weights using He initialization"""
@@ -151,49 +158,72 @@ class KalahNetwork(nn.Module):
 
         return log_policy, value
 
+    @torch.no_grad()
     def predict(self, board_state: np.ndarray) -> Tuple[np.ndarray, float]:
         """
         Predict policy and value for a single board state
+        Optimized to avoid repeated mode switching
         Args:
             board_state: Board state array [14]
         Returns:
             policy: Move probabilities [6]
             value: Position evaluation scalar
         """
-        self.eval()
-        with torch.no_grad():
-            # Convert to tensor and add batch dimension
-            x = torch.FloatTensor(board_state).unsqueeze(0)
-            if next(self.parameters()).is_cuda:
-                x = x.cuda()
+        # Convert to tensor and add batch dimension
+        x = torch.FloatTensor(board_state).unsqueeze(0).to(self.device)
 
-            log_policy, value = self(x)
+        log_policy, value = self(x)
 
-            # Convert to numpy
-            policy = torch.exp(log_policy).cpu().numpy()[0]
-            value = value.cpu().numpy()[0, 0]
+        # Convert to numpy
+        policy = torch.exp(log_policy).cpu().numpy()[0]
+        value = value.cpu().numpy()[0, 0]
 
         return policy, value
 
+    @torch.no_grad()
     def predict_batch(self, board_states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Predict policy and value for a batch of board states
+        Optimized for GPU batch processing
         Args:
             board_states: Board state array [batch_size, 14]
         Returns:
             policies: Move probabilities [batch_size, 6]
             values: Position evaluations [batch_size]
         """
-        self.eval()
-        with torch.no_grad():
-            x = torch.FloatTensor(board_states)
-            if next(self.parameters()).is_cuda:
-                x = x.cuda()
+        # Handle empty batch
+        if len(board_states) == 0:
+            return np.array([]), np.array([])
 
-            log_policies, values = self(x)
+        # Convert to tensor and move to GPU
+        x = torch.FloatTensor(board_states).to(self.device)
 
-            # Convert to numpy
-            policies = torch.exp(log_policies).cpu().numpy()
-            values = values.cpu().numpy().squeeze()
+        log_policies, values = self(x)
+
+        # Convert to numpy
+        policies = torch.exp(log_policies).cpu().numpy()
+        values = values.cpu().numpy().squeeze()
+
+        # Handle single value case
+        if values.ndim == 0:
+            values = np.array([values])
 
         return policies, values
+
+    def compile_for_inference(self):
+        """
+        Optional: Compile the model with TorchScript for faster inference
+        """
+        try:
+            # Create dummy input
+            dummy_input = torch.randn(1, self.config.model.input_dim).to(self.device)
+
+            # Trace the model
+            traced_model = torch.jit.trace(self, dummy_input)
+
+            print("Model successfully compiled with TorchScript")
+            return traced_model
+        except Exception as e:
+            print(f"Failed to compile model: {e}")
+            print("Continuing with standard PyTorch model")
+            return self

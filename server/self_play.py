@@ -25,21 +25,31 @@ class SelfPlayWorker:
     """Worker process for generating self-play games"""
 
     def __init__(
-        self, worker_id: int, config: AlphaZeroConfig, model_path: Optional[str] = None
+        self,
+        worker_id: int,
+        config: AlphaZeroConfig,
+        model_path: Optional[str] = None,
+        gpu_id: Optional[int] = None,
     ) -> None:
         """
-        Initializes a SelfPlayWorker instance.
+        Initializes a SelfPlayWorker instance with GPU support.
 
         Args:
             worker_id (int): Unique identifier for the worker.
             config (AlphaZeroConfig): Configuration object containing parameters for AlphaZero.
             model_path (Optional[str], optional): Path to the pre-trained model file. Defaults to None.
-
-        Sets up logging, loads the neural network model, and initializes the Monte Carlo Tree Search (MCTS) engine.
+            gpu_id (Optional[int], optional): GPU device ID to use. If None, uses CPU.
         """
         self.worker_id = worker_id
         self.config = config
         self.model_path = model_path
+        self.gpu_id = gpu_id
+
+        # Set device
+        if gpu_id is not None:
+            self.device = f"cuda:{gpu_id}"
+        else:
+            self.device = "cpu"
 
         # Setup logging
         logging.basicConfig(
@@ -48,28 +58,36 @@ class SelfPlayWorker:
         )
         self.logger = logging.getLogger(f"SelfPlayWorker{worker_id}")
 
-        # Load model
+        # Load model on specific device
         self.network = self._load_model()
-        self.mcts = MCTS(config, self.network)
+
+        # Create MCTS with larger batch size for GPU
+        batch_size = 64 if self.device.startswith("cuda") else 32
+        self.mcts = MCTS(config, self.network, batch_size=batch_size)
+
+        self.logger.info(f"Worker {worker_id} initialized on {self.device}")
 
     def _load_model(self) -> KalahNetwork:
         """
-        Loads a KalahNetwork model from the specified file path if it exists;
-        otherwise, initializes a new model with random weights.
-
-        Returns:
-            KalahNetwork: The loaded or newly initialized KalahNetwork model in evaluation mode.
+        Loads a KalahNetwork model optimized for GPU inference
         """
-        network = KalahNetwork(self.config)
+        network = KalahNetwork(self.config, device=self.device)
 
         if self.model_path and os.path.exists(self.model_path):
-            checkpoint = torch.load(self.model_path, map_location="cpu")
+            checkpoint = torch.load(self.model_path, map_location=self.device)
             network.load_state_dict(checkpoint["model_state_dict"])
             self.logger.info(f"Loaded model from {self.model_path}")
         else:
             self.logger.info("Using random initialized model")
 
-        network.eval()
+        # Already in eval mode and on correct device from __init__
+        # Optionally compile for faster inference
+        if self.device.startswith("cuda"):
+            compiled_network = network.compile_for_inference()
+            # If compilation was successful, use the compiled version
+            if isinstance(compiled_network, torch.jit.ScriptModule):
+                return KalahNetwork(compiled_network)
+
         return network
 
     def play_game(
@@ -212,21 +230,22 @@ def run_self_play_worker(
     Runs a self-play worker to generate game data.
 
     Args:
-        args (tuple): A tuple containing:
+        args (tuple): A tuple containing the following elements:
             - worker_id (int): The unique identifier for the worker.
             - config (Any): Configuration object for the self-play worker.
             - model_path (str): Path to the model to be used for self-play.
-            - num_games (int): Number of games to run.
+            - num_games (int): Number of games to run in self-play.
+            - gpu_id (Optional[int]): GPU device ID to use (if applicable).
 
     Returns:
         List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
             A list of tuples, each containing:
                 - The state array (np.ndarray of float64)
                 - The policy array (np.ndarray of float64)
-                - The value (float) for each game played.
+                - The game result (float)
     """
-    worker_id, config, model_path, num_games = args
-    worker = SelfPlayWorker(worker_id, config, model_path)
+    worker_id, config, model_path, num_games, gpu_id = args
+    worker = SelfPlayWorker(worker_id, config, model_path, gpu_id=gpu_id)
     return worker.run(num_games)
 
 
@@ -248,24 +267,22 @@ class SelfPlayManager:
         self.logger = logging.getLogger("SelfPlayManager")
 
     def generate_games(
-        self, model_path: Optional[str] = None
+        self, model_path: Optional[str] = None, num_gpus: int = 4
     ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
         """
-        Generates self-play game experiences in parallel using multiple worker processes.
+        Generates self-play game experiences in parallel using multiple GPUs.
 
         Args:
-            model_path (Optional[str], optional): Path to the model to be used for self-play. If None, uses the default model. Defaults to None.
+            model_path (Optional[str], optional): Path to the model to use for self-play. If None, uses the default model. Defaults to None.
+            num_gpus (int, optional): Number of GPUs available for distributing workers. Defaults to 4.
 
         Returns:
             List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]]:
-                A shuffled list of experiences generated from all workers. Each experience is a tuple containing:
-                    - state (npt.NDArray[np.float64]): The game state.
-                    - policy (npt.NDArray[np.float64]): The policy probabilities.
-                    - value (float): The value estimate for the state.
+                A list of tuples, each containing the state array, policy array, and reward for each experience generated during self-play.
 
         Logs:
-            - Number of workers and total games to be generated.
-            - When self-play workers start.
+            - Number of workers and games to be generated.
+            - Distribution of workers across GPUs.
             - Total number of experiences generated.
         """
         num_workers = self.config.self_play.num_workers
@@ -275,17 +292,17 @@ class SelfPlayManager:
             f"Starting {num_workers} workers to generate {num_workers * games_per_worker} games"
         )
 
-        # Prepare argument tuples for each worker
-        worker_args = [
-            (worker_id, self.config, model_path, games_per_worker)
-            for worker_id in range(num_workers)
-        ]
+        # Distribute workers across available GPUs
+        worker_args = []
+        for worker_id in range(num_workers):
+            gpu_id = worker_id % num_gpus if num_gpus > 0 else None
+            worker_args.append(
+                (worker_id, self.config, model_path, games_per_worker, gpu_id)
+            )
 
-        # Use multiprocessing pool to parallelize work
+        # Use multiprocessing pool
         with mp.Pool(num_workers) as pool:
-            self.logger.info(
-                "Starting self-play workers..."
-            )  # This only runs once for 64 threads
+            self.logger.info(f"Starting self-play workers across {num_gpus} GPUs...")
             results = pool.map(run_self_play_worker, worker_args)
 
         # Flatten all experiences

@@ -40,7 +40,8 @@ launch_training() {
     echo ""
     
     # Launch training with proper error handling
-    python main.py "$@" 2>&1 | tee kalah_logs/training_$(date +%Y%m%d_%H%M%S).log
+    # python main.py "$@" 2>&1 | tee kalah_logs/training_$(date +%Y%m%d_%H%M%S).log
+    python -m cProfile -s cumulative main.py > main_0.txt
 }
 
 # Function to launch monitoring

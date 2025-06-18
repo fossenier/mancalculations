@@ -1,12 +1,12 @@
 """
 Monte Carlo Tree Search implementation for Kalah
-Optimized for the game's variable-length turns and tactical nature
+Optimized for GPU batch evaluation
 """
 
 import numpy as np
 import numpy.typing as npt
 import math
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from collections import defaultdict
 import threading
 from kalah_game import KalahGame
@@ -87,20 +87,21 @@ class MCTSNode:
 class MCTS:
     """
     Monte Carlo Tree Search for Kalah
-    Handles variable-length turns and implements virtual loss for parallelization
+    Optimized for GPU batch evaluation
     """
 
-    def __init__(self, config, network):
+    def __init__(self, config, network, batch_size: int = 32):
         self.config = config
         self.network = network
         self.nodes = {}
         self.lock = threading.Lock()
+        self.batch_size = batch_size
 
     def search(
         self, game: KalahGame, root_state: Optional[str] = None
     ) -> npt.NDArray[np.float64]:
         """
-        Run MCTS simulations and return visit counts as action probabilities
+        Run MCTS simulations with batched neural network evaluation
         Args:
             game: KalahGame instance
             root_state: Optional root state key for tree reuse
@@ -112,7 +113,7 @@ class MCTS:
 
         # Add Dirichlet noise to root node for exploration
         if root_state not in self.nodes:
-            self._expand_node(game, root_state)
+            self._expand_node_single(game, root_state)
 
         root_node = self.nodes[root_state]
         root_node.current_player = game.current_player
@@ -129,9 +130,29 @@ class MCTS:
                     1 - self.config.mcts.dirichlet_epsilon
                 ) * child.prior + self.config.mcts.dirichlet_epsilon * noise[action]
 
-        # Run simulations
-        for _ in range(self.config.mcts.num_simulations):
-            self._simulate(game.clone(), root_state)
+        # Collect leaf nodes in batches
+        num_simulations = self.config.mcts.num_simulations
+        simulation_count = 0
+
+        while simulation_count < num_simulations:
+            # Determine batch size for this iteration
+            current_batch_size = min(
+                self.batch_size, num_simulations - simulation_count
+            )
+
+            # Collect paths to leaf nodes
+            leaf_infos = []
+            for _ in range(current_batch_size):
+                game_copy = game.clone()
+                path, leaf_game, leaf_state_key = self._simulate_to_leaf(
+                    game_copy, root_state
+                )
+                leaf_infos.append((path, leaf_game, leaf_state_key))
+
+            # Batch evaluate all leaf nodes
+            self._batch_evaluate_and_backup(leaf_infos)
+
+            simulation_count += current_batch_size
 
         # Extract visit counts
         visits = np.zeros(6)
@@ -140,26 +161,12 @@ class MCTS:
 
         return visits
 
-    def _simulate(self, game, root_state: str) -> float:
+    def _simulate_to_leaf(
+        self, game: KalahGame, root_state: str
+    ) -> Tuple[List, KalahGame, str]:
         """
-        Simulates a single Monte Carlo Tree Search (MCTS) rollout from the given root state.
-
-        This method performs the following MCTS phases:
-        1. Selection: Traverses the tree from the root state, selecting child
-        nodes according to the tree policy, until a leaf node is reached.
-        2. Expansion: Expands the leaf node by adding its children to the tree if
-        it has not been expanded yet.
-        3. Evaluation: Evaluates the leaf node using either the actual game outcome
-        (if the game is over) or a neural network prediction.
-        4. Backup: Propagates the evaluation result back up the path taken during
-        selection, updating statistics for each node.
-
-        Args:
-            game: The game environment, which must provide methods for checking game over, getting valid moves, applying moves, and evaluating the state.
-            root_state (str): The string representation of the root state from which to start the simulation.
-
-        Returns:
-            float: The value of the simulation from the perspective of the current player at the root state.
+        Select down to a leaf node without evaluation
+        Returns: (path, game_state, state_key)
         """
         path = []
         current_state = root_state
@@ -167,35 +174,33 @@ class MCTS:
         # Selection phase - traverse tree until leaf
         while True:
             if current_state not in self.nodes:
-                self._expand_node(game, current_state)
-                break
+                # Found unexpanded node
+                return path, game, current_state
 
             node = self.nodes[current_state]
             node.current_player = game.current_player
 
-            # Check if game is over BEFORE trying to expand or select
+            # Check if game is over
             if game.game_over:
-                break
+                return path, game, current_state
 
             valid_moves = game.get_valid_moves()
             if not node.is_expanded():
-                self._expand_node(game, current_state)
-                break
+                # Node exists but not expanded
+                return path, game, current_state
 
             # Check if any valid moves exist
             if not np.any(valid_moves):
-                break
+                return path, game, current_state
 
             action = self._select_action(node, valid_moves)
             if action is None:
-                break
+                return path, game, current_state
 
             with self.lock:
                 node.children[action].virtual_loss += 1
 
-            path.append(
-                (current_state, action, game.current_player)
-            )  # Store player explicitly
+            path.append((current_state, action, game.current_player))
 
             # Make move and check for extra turn
             extra_turn = game.make_move(action)
@@ -203,42 +208,59 @@ class MCTS:
 
             # Handle extra turns by continuing with same player context
             if extra_turn and not game.game_over:
-                continue  # Don't alternate player expectation
+                continue
 
             # Check game over after move
             if game.game_over:
-                break
+                return path, game, current_state
 
-        # Evaluation phase
-        if game.game_over:
-            # Use actual game outcome
-            value = game.get_reward(game.current_player)
-        else:
-            # Use neural network evaluation
-            state = game.get_canonical_state()
-            _, value = self.network.predict(state)
-
-        # Backup phase - propagate value up the tree
-        self._backup(path, value)
-
-        return value
-
-    def _expand_node(self, game: KalahGame, state_key: str) -> None:
+    def _batch_evaluate_and_backup(
+        self, leaf_infos: List[Tuple[List, KalahGame, str]]
+    ) -> None:
         """
-        Expands a node in the MCTS tree for the given game state.
+        Evaluate multiple leaf nodes in a single batch and backup values
+        """
+        # Separate terminal and non-terminal nodes
+        non_terminal_infos = []
+        terminal_values = []
 
-        If the node corresponding to `state_key` already exists in the tree, the
-        method returns immediately. Otherwise, it uses the neural network to predict
-        the policy (action probabilities) and value for the current canonical game
-        state. The policy is masked to zero out invalid moves and renormalized. If
-        all moves are invalid according to the policy, valid moves are assigned
-        equal probability. A new MCTSNode is created, and for each valid action,
-        a child node is initialized with the corresponding prior probability. Finally,
-        the new node is added to the tree in a thread-safe manner.
+        for i, (path, game, state_key) in enumerate(leaf_infos):
+            if game.game_over:
+                # Terminal node - use actual game outcome
+                value = game.get_reward(game.current_player)
+                terminal_values.append((i, value))
+            else:
+                non_terminal_infos.append((i, path, game, state_key))
 
-        Args:
-            game: The game environment providing state and move information.
-            state_key (str): A unique key representing the current game state.
+        # Batch evaluate non-terminal nodes
+        if non_terminal_infos:
+            # Collect states for batch evaluation
+            states = []
+            for _, _, game, _ in non_terminal_infos:
+                states.append(game.get_canonical_state())
+
+            # Batch neural network evaluation
+            states_array = np.array(states)
+            policies, values = self.network.predict_batch(states_array)
+
+            # Expand nodes with predicted policies
+            for idx, (original_idx, path, game, state_key) in enumerate(
+                non_terminal_infos
+            ):
+                if state_key not in self.nodes:
+                    self._expand_node_with_policy(game, state_key, policies[idx])
+
+                # Backup the value
+                self._backup(path, values[idx])
+
+        # Backup terminal values
+        for original_idx, value in terminal_values:
+            path = leaf_infos[original_idx][0]
+            self._backup(path, value)
+
+    def _expand_node_single(self, game: KalahGame, state_key: str) -> None:
+        """
+        Expand a single node (used for root node initialization)
         """
         if state_key in self.nodes:
             return
@@ -246,6 +268,17 @@ class MCTS:
         # Get neural network predictions
         state = game.get_canonical_state()
         policy, value = self.network.predict(state)
+
+        self._expand_node_with_policy(game, state_key, policy)
+
+    def _expand_node_with_policy(
+        self, game: KalahGame, state_key: str, policy: np.ndarray
+    ) -> None:
+        """
+        Expand a node with a given policy
+        """
+        if state_key in self.nodes:
+            return
 
         # Mask invalid actions and renormalize
         valid_moves = game.get_valid_moves()
@@ -309,7 +342,7 @@ class MCTS:
         Propagates the simulation result back through the path of visited nodes, updating visit counts and value sums.
 
         Args:
-            path (list): A list of (state_key, action) tuples representing the sequence of nodes and actions taken during the simulation.
+            path (list): A list of (state_key, action, player) tuples representing the sequence of nodes and actions taken during the simulation.
             value (float): The simulation result to be backed up, typically from the perspective of the final player.
 
         Notes:
@@ -317,13 +350,11 @@ class MCTS:
             - Adjusts virtual loss for each child node.
             - Updates value sums based on whether the child node's current player matches the final player.
         """
-        # Get the final player from the last node in the path
-        final_state_key = path[-1][0] if path else None
-        final_player = (
-            self.nodes[final_state_key].current_player if final_state_key else None
-        )
+        # Value is from the perspective of the player at the leaf
+        # We need to flip it as we go up the tree
+        current_value = value
 
-        for state_key, action, _ in reversed(path):
+        for state_key, action, player in reversed(path):
             node = self.nodes[state_key]
             child = node.children[action]
 
@@ -331,11 +362,12 @@ class MCTS:
                 child.visit_count += 1
                 child.virtual_loss = max(0, child.virtual_loss - 1)
 
-                # Value from perspective of the player who made this move
-                # The child node's current_player is who benefits from this move's outcome
-                node_value = value if child.current_player == final_player else -value
-                child.value_sum += node_value
+                # Update value from the perspective of the player who made this move
+                child.value_sum += current_value
                 node.visit_count += 1
+
+            # Flip value for the opponent
+            current_value = -current_value
 
     def _state_key(self, game: KalahGame) -> str:
         """

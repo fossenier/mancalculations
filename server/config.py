@@ -56,7 +56,7 @@ class SelfPlayConfig:
     """Self-play game generation configuration"""
 
     num_workers: int = 64  # CPU processes for game generation
-    games_per_worker: int = 500
+    games_per_worker: int = 2
     max_game_length: int = 200  # Maximum moves before draw
 
 

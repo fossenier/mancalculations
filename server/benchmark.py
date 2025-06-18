@@ -20,7 +20,7 @@ def time_single_game(config, model_path=None):
         tuple: (game_time_seconds, num_experiences, moves_played)
     """
     print("Initializing worker...")
-    worker = SelfPlayWorker(worker_id=0, config=config, model_path=model_path)
+    worker = SelfPlayWorker(worker_id=0, config=config, model_path=model_path, gpu_id=0)
 
     print("Starting single game...")
     start_time = time.time()
