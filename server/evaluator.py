@@ -6,7 +6,7 @@ Includes tournament play, benchmarking, and performance analysis
 import numpy as np
 import numpy.typing as npt
 import torch
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Literal, Tuple, Optional, Any
 import logging
 from datetime import datetime
 import json
@@ -19,20 +19,35 @@ from config import AlphaZeroConfig
 
 
 class RandomPlayer:
-    """Random baseline player"""
+    """
+    Player making random moves as a baseline
+    """
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """
+        Initializes the instance with a default name attribute set to 'Random'.
+        """
         self.name = "Random"
 
     def get_action(self, game: KalahGame) -> int:
-        """Select random valid action"""
+        """
+        Selects and returns a random valid action for the given KalahGame instance.
+
+        Args:
+            game (KalahGame): The current game state from which to select a valid action.
+
+        Returns:
+            int: The index of the randomly selected valid action.
+        """
         valid_moves = game.get_valid_moves()
         valid_actions = np.where(valid_moves)[0]
         return np.random.choice(valid_actions)
 
 
 class MinimaxPlayer:
-    """Minimax player with configurable depth"""
+    """
+    Minimax player with configurable depth
+    """
 
     def __init__(self, depth: int = 5, use_endgame_db: bool = False):
         self.name = f"Minimax(depth={depth})"
@@ -41,7 +56,15 @@ class MinimaxPlayer:
         self.nodes_evaluated = 0
 
     def get_action(self, game: KalahGame) -> int:
-        """Select action using minimax with alpha-beta pruning"""
+        """
+        Determines the best action to take for the given game state using the minimax algorithm with alpha-beta pruning.
+
+        Args:
+            game (KalahGame): The current state of the Kalah game.
+
+        Returns:
+            int: The index of the selected action (move) based on the minimax evaluation.
+        """
         self.nodes_evaluated = 0
         _, action = self._minimax(game, self.depth, -float("inf"), float("inf"), True)
         return action
@@ -87,8 +110,8 @@ class MinimaxPlayer:
             max_eval = -float("inf")
             best_action: int = valid_actions[0]
 
-            action: int  # np.intp
             for action in valid_actions:
+                action = int(action)
                 game_copy = game.clone()
                 extra_turn = game_copy.make_move(action)
 
@@ -116,8 +139,8 @@ class MinimaxPlayer:
             min_eval = float("inf")
             best_action: int = valid_actions[0]
 
-            action: int  # np.intp
             for action in valid_actions:
+                action = int(action)
                 game_copy = game.clone()
                 extra_turn = game_copy.make_move(action)
 
@@ -165,7 +188,9 @@ class MinimaxPlayer:
 
 
 class AlphaZeroPlayer:
-    """AlphaZero player using neural network and MCTS"""
+    """
+    AlphaZero player using neural network and MCTS
+    """
 
     def __init__(
         self,
@@ -199,20 +224,34 @@ class AlphaZeroPlayer:
         # Clear tree to save memory
         self.mcts.clear_tree()
 
-        return action
+        return int(action)
 
 
 class Evaluator:
-    """System for evaluating model performance"""
+    """
+    System for evaluating model performance
+    """
 
-    def __init__(self, config: AlphaZeroConfig):
+    def __init__(self, config: AlphaZeroConfig) -> None:
+        """
+        Initializes the Evaluator with the given AlphaZero configuration.
+        Args:
+            config (AlphaZeroConfig): The configuration object for AlphaZero.
+        Attributes:
+            config (AlphaZeroConfig): Stores the provided configuration.
+            logger (logging.Logger): Logger instance for the Evaluator class.
+        """
+
         self.config = config
         self.logger = logging.getLogger("Evaluator")
 
     def play_match(
-        self, player1, player2, num_games: int = 100, verbose: bool = False
-    ) -> Dict[str, any]:
-        """Play a match between two players"""
+        self,
+        player1: RandomPlayer | MinimaxPlayer | AlphaZeroPlayer,
+        player2: RandomPlayer | MinimaxPlayer | AlphaZeroPlayer,
+        num_games: int = 100,
+        verbose: bool = False,
+    ) -> Dict[str, Any]:
         results = {
             "wins": [0, 0],
             "draws": 0,
@@ -220,6 +259,28 @@ class Evaluator:
             "game_lengths": [],
             "score_differences": [],
         }
+        """
+        Simulates a series of Kalah matches between two players and collects statistics.
+
+        Args:
+            player1 (RandomPlayer | MinimaxPlayer | AlphaZeroPlayer): The first player instance.
+            player2 (RandomPlayer | MinimaxPlayer | AlphaZeroPlayer): The second player instance.
+            num_games (int, optional): Number of games to play. Defaults to 100.
+            verbose (bool, optional): If True, renders the first game step-by-step. Defaults to False.
+
+        Returns:
+            Dict[str, float]: A dictionary containing match statistics:
+                - "wins": List[int] - Number of wins for each player.
+                - "draws": int - Number of drawn games.
+                - "total_score": List[int] - Total score accumulated by each player.
+                - "game_lengths": List[int] - Number of moves in each game.
+                - "score_differences": List[int] - Score difference for each game.
+                - "win_rate": List[float] - Win rate for each player.
+                - "draw_rate": float - Draw rate.
+                - "avg_score": List[float] - Average score for each player.
+                - "avg_game_length": float - Average number of moves per game.
+                - "avg_score_diff": float - Average score difference per game.
+        """
 
         for game_num in range(num_games):
             # Alternate starting player
@@ -237,7 +298,6 @@ class Evaluator:
                 not game.game_over
                 and move_count < self.config.self_play.max_game_length
             ):
-                current_player_idx = player_map[game.current_player]
                 current_player = players[game.current_player]
 
                 # Get action
@@ -254,9 +314,11 @@ class Evaluator:
             results["game_lengths"].append(move_count)
             results["score_differences"].append(game.get_score_difference())
 
+            # The game ended in a draw
             if game.winner == -1:
                 results["draws"] += 1
-            else:
+            # The game had a winner
+            elif game.winner is not None:
                 winner_idx = player_map[game.winner]
                 results["wins"][winner_idx] += 1
 
@@ -279,8 +341,29 @@ class Evaluator:
 
         return results
 
-    def evaluate_model(self, model_path: str, iteration: int) -> Dict[str, any]:
-        """Comprehensive evaluation of a model"""
+    def evaluate_model(self, model_path: str, iteration: int) -> Dict[str, Any]:
+        """
+        Evaluates a trained AlphaZero model by playing matches against various
+        opponents and performing self-play with different MCTS simulation counts.
+
+        Args:
+            model_path (str): Path to the trained model to evaluate.
+            iteration (int): The training iteration number corresponding to the model.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing evaluation results, including:
+                - 'iteration': The iteration number.
+                - 'timestamp': ISO-formatted timestamp of evaluation.
+                - 'model_path': Path to the evaluated model.
+                - 'matches': Results against each opponent, keyed by opponent name,
+                with win rates, draw rates, average scores, and other statistics.
+                - 'mcts_scaling': Results of self-play between models with different
+                MCTS simulation counts.
+
+        Side Effects:
+            - Logs evaluation progress and results.
+            - Saves evaluation results to persistent storage via `_save_evaluation`.
+        """
         self.logger.info(f"Evaluating model from iteration {iteration}")
 
         evaluation_results = {
@@ -342,8 +425,25 @@ class Evaluator:
 
     def compare_models(
         self, model1_path: str, model2_path: str, num_games: int = 100
-    ) -> Dict[str, any]:
-        """Compare two models directly"""
+    ) -> Dict[str, Any]:
+        """
+        Compares two AlphaZero models by playing a specified number of games between them.
+
+        Args:
+            model1_path (str): Path to the first model's checkpoint or weights file.
+            model2_path (str): Path to the second model's checkpoint or weights file.
+            num_games (int, optional): Number of games to play for the comparison. Defaults to 100.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing:
+                - "model1": Path to the first model.
+                - "model2": Path to the second model.
+                - "model1_win_rate": Win rate of the first model.
+                - "model2_win_rate": Win rate of the second model.
+                - "draw_rate": Rate of draws between the two models.
+                - "avg_game_length": Average length of the games played.
+                - "timestamp": ISO formatted timestamp of when the comparison was performed.
+        """
         player1 = AlphaZeroPlayer(self.config, model1_path)
         player2 = AlphaZeroPlayer(self.config, model2_path)
 
@@ -369,8 +469,18 @@ class Evaluator:
 
         return comparison
 
-    def _save_evaluation(self, evaluation_results: Dict[str, any]):
-        """Save evaluation results to file"""
+    def _save_evaluation(self, evaluation_results: Dict[str, Any]):
+        """
+        Save evaluation results to a JSON file.
+
+        Args:
+            evaluation_results (Dict[str, Any]): A dictionary containing the evaluation results,
+                including an 'iteration' key used to name the output file.
+
+        Side Effects:
+            Writes the evaluation results to a JSON file in the log directory specified by the configuration.
+            Logs the file path where the results are saved.
+        """
         filename = os.path.join(
             self.config.system.log_dir,
             f"evaluation_iter{evaluation_results['iteration']}.json",
@@ -383,8 +493,30 @@ class Evaluator:
 
     def analyze_game_quality(
         self, model_path: str, num_games: int = 10
-    ) -> Dict[str, any]:
-        """Analyze quality of games played by the model"""
+    ) -> Dict[str, Any]:
+        """
+        Analyzes the quality of games played by an AlphaZero-based player.
+
+        Simulates a number of games using the provided model and collects various statistics
+        to evaluate the quality and characteristics of the gameplay. The analysis includes
+        move distributions, game lengths, score differences, capture frequencies, and extra turn
+        frequencies. Summary statistics such as average game length, standard deviation of game
+        length, average absolute score difference, average capture frequency, average extra turn
+        frequency, and move entropy are computed.
+
+        Args:
+            model_path (str): Path to the trained AlphaZero model to be evaluated.
+            num_games (int, optional): Number of games to simulate for analysis. Defaults to 10.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the following keys:
+                - 'avg_game_length': Average length of the simulated games.
+                - 'std_game_length': Standard deviation of game lengths.
+                - 'avg_score_diff': Average absolute score difference between players.
+                - 'avg_capture_freq': Average frequency of capture events per move.
+                - 'avg_extra_turn_freq': Average frequency of extra turns per move.
+                - 'move_entropy': Entropy of the move distribution across all games.
+        """
         player = AlphaZeroPlayer(self.config, model_path)
 
         analysis = {
