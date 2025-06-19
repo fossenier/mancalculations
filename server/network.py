@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import numpy.typing as npt
 from typing import Tuple, Optional
 
 
@@ -181,7 +182,9 @@ class KalahNetwork(nn.Module):
         return policy, value
 
     @torch.no_grad()
-    def predict_batch(self, board_states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def predict_batch(
+        self, board_states: np.ndarray
+    ) -> Tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """
         Predict policy and value for a batch of board states
         Optimized for GPU batch processing
