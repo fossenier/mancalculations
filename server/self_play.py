@@ -161,9 +161,9 @@ class SelfPlayWorker:
 
             # Add this check:
             if not valid_moves[action]:
-                # print(f"ERROR: Selected invalid action {action}")
-                # print(f"Valid moves: {valid_moves}")
-                # print(f"Action probs: {action_probs}")
+                print(f"ERROR: Selected invalid action {action}")
+                print(f"Valid moves: {valid_moves}")
+                print(f"Action probs: {action_probs}")
                 # Force select from valid moves
                 action = np.random.choice(np.where(valid_moves)[0])
 

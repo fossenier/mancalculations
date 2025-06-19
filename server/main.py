@@ -20,22 +20,6 @@ from evaluator import Evaluator
 from typing import Optional
 
 
-def train_worker(rank: int, config: AlphaZeroConfig, experiences):
-    """Worker function for distributed training"""
-    trainer = AlphaZeroTrainer(config, rank, config.distributed.num_gpus)
-
-    try:
-        # Load experiences if not rank 0
-        if rank != 0:
-            experiences = []  # Other ranks will use dummy data
-
-        # Run training
-        trainer.train_iteration(experiences)
-
-    finally:
-        trainer.cleanup()
-
-
 class AlphaZeroManager:
     """Main coordinator for AlphaZero training"""
 
@@ -100,7 +84,7 @@ class AlphaZeroManager:
 
             # Launch distributed training
             mp.spawn(
-                train_worker,
+                self._train_worker,
                 args=(self.config, experiences),
                 nprocs=self.config.distributed.num_gpus,
                 join=True,
@@ -158,6 +142,21 @@ class AlphaZeroManager:
             ):
                 self.logger.info("Training converged!")
                 break
+
+    def _train_worker(self, rank: int, config: AlphaZeroConfig, experiences):
+        """Worker function for distributed training"""
+        trainer = AlphaZeroTrainer(config, rank, config.distributed.num_gpus)
+
+        try:
+            # Load experiences if not rank 0
+            if rank != 0:
+                experiences = []  # Other ranks will use dummy data
+
+            # Run training
+            trainer.train_iteration(experiences)
+
+        finally:
+            trainer.cleanup()
 
     def _get_latest_model_path(self) -> Optional[str]:
         """Get path to latest model checkpoint"""
