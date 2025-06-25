@@ -53,7 +53,7 @@ class KalahGame:
         player who is next to take an action.
         """
         if self.current_player == 1:
-            return np.concatenate((self.board[7:14], self.board[0:7]))
+            return np.concatenate((self.board[7:14], self.board[0:7])).copy()
         return self.board.copy()
 
     def get_valid_moves(self) -> npt.NDArray[np.float32]:

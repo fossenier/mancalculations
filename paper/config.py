@@ -15,6 +15,7 @@ class AlphaZeroConfig(object):
         # Number of moves from start of game where the action is chosen
         # using stochastic policy
         self.num_sampling_moves = 30
+        self.temperature = 1.0
         # Number of moves before forcing the game to end (Do I need this?)
         self.max_moves = 512  # for chess and shogi, 722 for Go.
         # Number of MCTS model calls in choosing each action
