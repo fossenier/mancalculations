@@ -8,8 +8,10 @@ class AlphaZeroConfig(object):
     def __init__(self):
         ### Self-Play
         # Number of games played in parallel.
-        self.num_actors = 5000
-
+        # self.num_actors = 5000 # from paper
+        self.num_cores = 60
+        self.games_per_core = 64
+        
         # Number of moves from start of game where the action is chosen
         # using stochastic policy
         self.num_sampling_moves = 30
