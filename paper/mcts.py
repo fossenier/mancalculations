@@ -5,13 +5,14 @@ and to pass the work to the workers handling 4x A100 interaction. Not currently
 setup to support virtual loss.
 """
 
+import math
 from multiprocessing import Queue
 import numpy as np
 from inference_batcher import inference_queue
 from config import AlphaZeroConfig
 from kalah import KalahGame
 from numpy.typing import NDArray
-from typing import Tuple
+from typing import Tuple, cast
 
 
 class MCTSNode:
@@ -45,7 +46,25 @@ class MCTSNode:
         self.children: dict[int, "MCTSNode"] = {}  # Child nodes, keyed by action
         self.parent: "MCTSNode | None" = parent  # Parent node, None for root node
 
-    def expand(self, prior: NDArray[np.float32], valid_actions: list[int]) -> None:
+    def apply_dirichlet_noise(
+        self, root_dirichlet_alpha: float, root_exploration_fraction: float
+    ) -> None:
+        actions = self.children.keys()
+        noise = np.random.gamma(root_dirichlet_alpha, 1, len(actions))
+        frac = root_exploration_fraction
+        for a, n in zip(actions, noise):
+            if self.children[a].probability is None:
+                raise ValueError(
+                    "Cannot apply Dirichlet noise to a child node without a prior probability."
+                )
+
+            self.children[a].probability = np.float32(
+                np.float32(self.children[a].probability) * (1 - frac) + n * frac
+            )
+
+    def expand(
+        self, prior: NDArray[np.float32], valid_actions_mask: NDArray[np.float32]
+    ) -> None:
         """
         Expands the node by adding children for each valid action with a prior probability.
         This is called when the node is a leaf node and needs to be expanded.
@@ -53,8 +72,8 @@ class MCTSNode:
         if self.expanded():
             raise ValueError("Cannot expand an already expanded node.")
 
-        # valid_actions is a mask (e.g., [1, 0, 1, 0, 1, 0]) over actions [0-5]
-        for action, is_valid in enumerate(valid_actions):
+        # valid_actions is a mask (e.g., [1.0, 0.0, 1.0, 0.0, 1.0, 0.0]) over actions [0-5]
+        for action, is_valid in enumerate(valid_actions_mask):
             if is_valid:
                 self.children[action] = MCTSNode(
                     player=None, action=action, prior=prior[action], parent=self
@@ -130,7 +149,9 @@ class MCTS:
         self.chosen_path: list[MCTSStatistic] = []
         # The latest simulation to leaf node, to backpropogate
         self.latest_sim_path: list[MCTSNode] = []
-        self.latest_valid_actions: list[int] = []
+        self.latest_valid_actions_mask: NDArray[np.float32] = np.zeros(
+            6, dtype=np.float32
+        )
 
         # Prompt for  the first model response, which will initialize the root on first step() call
         requests.put((self.worker, self.game.get_canonical_state()))
@@ -183,24 +204,34 @@ class MCTS:
         (and updates visit counts + values too).
         """
         # No nodes in the latest chosen path implies this will be a root node
+        root_created = False
         if not self.latest_sim_path:
             self.root = MCTSNode(action=None, player=player, prior=None, parent=None)
             self.root.visit_count = 1
             self.root.total_value = value
+            # Set the root in the sim path to get expanded
+            root_created = True
             self.latest_sim_path.append(self.root)
-        # Backpropagate the value up the tree
-        else:
-            # First, expand the leaf node
-            # NOTE: This shouldn't attempt to expand the terminal state, due to the
-            # control flow in step(), but it will be safe and produce no children
-            # if that happens somehow (due to expand()'s use of get_valid_moves())
-            leaf_node = self.latest_sim_path[-1]
-            leaf_node.expand(prior, self.latest_valid_actions)
+            self.latest_valid_actions_mask = self.game.get_valid_moves()
 
-            for node in reversed(self.latest_sim_path):
-                node.visit_count += 1
-                # Value is negated for the opponent
-                node.total_value += value if node.player == player else -value
+        # Backpropagate the value up the tree
+        # First, expand the leaf node
+        # NOTE: This shouldn't attempt to expand the terminal state, due to the
+        # control flow in step(), but it will be safe and produce no children
+        # if that happens somehow (due to expand()'s use of get_valid_moves())
+        leaf_node = self.latest_sim_path[-1]
+        leaf_node.expand(prior, self.latest_valid_actions_mask)
+
+        # Apply Dirichlet noise to the root node's children if the root was just made
+        if root_created:
+            leaf_node.apply_dirichlet_noise(
+                self.config.root_dirichlet_alpha, self.config.root_exploration_fraction
+            )
+
+        for node in reversed(self.latest_sim_path):
+            node.visit_count += 1
+            # Value is negated for the opponent
+            node.total_value += value if node.player == player else -value
 
     def perform_action(self) -> None:
         """
@@ -211,6 +242,7 @@ class MCTS:
         if self.root is None:
             raise ValueError("Root node is None, cannot perform action.")
 
+        # NOTE: we don't need to mask for valid actions as only valid children are created
         # The number of moves to play a little more stochastically
         if len(self.chosen_path) < self.config.num_sampling_moves:
             probabilities = []
@@ -242,49 +274,44 @@ class MCTS:
         pass
 
     def simulate(self) -> None:
-        # TODO: Go to leaf node, and model call
-        # Update latest_valid_actions
-        pass
+        # Grab the moment in time of the root, copy it, save it to the sim path
+        node = cast(MCTSNode, self.root)
+        scratch_game = self.game.clone()
+        self.latest_sim_path.append(node)
 
+        # Run down the tree to a leaf node, selecting the child based on PUCT
+        while node.expanded():
+            action, node = self.select_child(node)
+            scratch_game.make_move(action)  # Update scratch game
+            self.latest_sim_path.append(node)  # Add this moment to the sim path
 
-import numpy as np
+        # At the leaf node, save the available moves
+        self.latest_valid_actions_mask = scratch_game.get_valid_moves()
 
+        # Make the model call, search will resume from the next step() call
+        self.requests.put(
+            (
+                self.worker,
+                scratch_game.get_canonical_state(),
+            )
+        )
 
-def select_action(visit_counts, temperature=1.0):
-    """
-    Select action based on visit counts and temperature.
+    def select_child(self, node: MCTSNode) -> Tuple[int, MCTSNode]:
+        _, action, child = max(
+            (self.ucb_score(node, child), action, child)
+            for action, child in node.children.items()
+        )
+        return action, child
 
-    Args:
-        visit_counts: array of visit counts N(s,a) for each action
-        temperature: temperature parameter τ
+    def ucb_score(self, parent: MCTSNode, child: MCTSNode) -> float:
+        pb_c = (
+            math.log(
+                (parent.visit_count + self.config.pb_c_base + 1) / self.config.pb_c_base
+            )
+            + self.config.pb_c_init
+        )
+        pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + 1)
 
-    Returns:
-        selected action index
-    """
-    if temperature == 0:
-        # When temperature is 0, select action with highest visit count
-        return np.argmax(visit_counts)
-    else:
-        # Apply temperature scaling
-        scaled_counts = np.power(visit_counts, 1.0 / temperature)
-        # Normalize to get probabilities
-        probabilities = scaled_counts / np.sum(scaled_counts)
-        # Sample action according to probabilities
-        return np.random.choice(len(visit_counts), p=probabilities)
-
-
-def mcts_action_selection(visit_counts, move_number):
-    """
-    Select action with temperature schedule: τ=1 for first 30 moves, τ=0 afterwards
-    """
-    temperature = 1.0 if move_number < 30 else 0.0
-    return select_action(visit_counts, temperature)
-
-    def softmax_sample(
-        visit_count: int, action_visits: list[Tuple[int, int]]
-    ) -> Tuple[int, int]:
-        """
-        Samples an action based on the softmax distribution of visit counts.
-        """
-        # Exploration rate C(s)
-        # C(s) = log((1 + N(s) + pb_c_base) / pb_c_base) + pb_c_init
+        prior_score = pb_c * cast(float, child.probability)
+        value_score = float(child.value())
+        return prior_score + value_score
