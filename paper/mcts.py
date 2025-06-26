@@ -12,7 +12,7 @@ from inference_batcher import inference_queue
 from config import AlphaZeroConfig
 from kalah import KalahGame
 from numpy.typing import NDArray
-from typing import Tuple, cast
+from typing import List, Tuple, cast
 
 
 class MCTSNode:
@@ -156,9 +156,14 @@ class MCTS:
         # Prompt for  the first model response, which will initialize the root on first step() call
         requests.put((self.worker, self.game.get_canonical_state()))
 
-    def step(self, prior: NDArray[np.float32], value: np.float32) -> bool:
+    def step(
+        self, prior: NDArray[np.float32], value: np.float32
+    ) -> Tuple[NDArray[np.float32] | None, List[MCTSStatistic] | None]:
         """
-        Returns True if the game is still running, False if it has ended.
+        If returning NDArray[np.float32], that is a model request and the simulation is still running.
+        If returning List[MCTSStatistic], that is a window post and the game has ended, make a new one.
+        Returns True if the game is still running, the NDArray[np.float32] will return (model request)
+        False if it has ended, the List[MCTSStatistic] will return (window post).
 
         When a game ends, it is pushed to the window queue.
         """
@@ -187,14 +192,33 @@ class MCTS:
             # When the game ends, prepare statistics and push them to the window
             if self.game.game_over:
                 self.prepare_statistics()
+                # print(self.chosen_path)
                 self.window.put(self.chosen_path)
-                return False  # Game is over
+                self.window.empty()  # Flush the window queue
+                return (None, self.chosen_path)
+            # if self.game.game_over:
+            #     self.prepare_statistics()
+            #     print(
+            #         f"Before window.put: chosen_path length = {len(self.chosen_path)}"
+            #     )
+            #     print(f"chosen_path contents: {self.chosen_path}")
+
+            #     # Create a copy to avoid reference issues
+            #     path_copy = list(self.chosen_path)
+            #     print(f"path_copy length = {len(path_copy)}")
+
+            #     self.window.put(path_copy)
+            #     print("Successfully put data in window")
+            #     print("true" if not self.window.empty() else "false")
+            #     return False  # Game is over, return False
             else:
-                return True  # Game continues (new root node will be created next time)
+                return (
+                    self.game.get_canonical_state(),
+                    None,
+                )  # Game continues (new root node will be created next time)
 
         # Otherwise, run another simulation for this root node
-        self.simulate()
-        return True
+        return (self.simulate(), None)
 
     def backpropagate(
         self, prior: NDArray[np.float32], value: np.float32, player: int
@@ -207,8 +231,6 @@ class MCTS:
         root_created = False
         if not self.latest_sim_path:
             self.root = MCTSNode(action=None, player=player, prior=None, parent=None)
-            self.root.visit_count = 1
-            self.root.total_value = value
             # Set the root in the sim path to get expanded
             root_created = True
             self.latest_sim_path.append(self.root)
@@ -220,6 +242,9 @@ class MCTS:
         # control flow in step(), but it will be safe and produce no children
         # if that happens somehow (due to expand()'s use of get_valid_moves())
         leaf_node = self.latest_sim_path[-1]
+        # if root_created:
+        # print(self.game.get_state())
+        # print(f"Expanding root node with prior probabilities {prior}")
         leaf_node.expand(prior, self.latest_valid_actions_mask)
 
         # Apply Dirichlet noise to the root node's children if the root was just made
@@ -256,24 +281,44 @@ class MCTS:
                         ),
                     )
                 )
+            # Normalize probabilities
+            total_prob = sum(prob for _, prob in probabilities)
+            if total_prob > 0:
+                probabilities = [
+                    (action, prob / total_prob) for action, prob in probabilities
+                ]
+            else:
+                # fallback: uniform distribution if all probs are zero
+                num_actions = len(probabilities)
+                probabilities = [
+                    (action, 1.0 / num_actions) for action, _ in probabilities
+                ]
+            # print(
+            #     f"Sampling action from root with {len(probabilities)} children, total prob: {total_prob}"
+            # )
             action = np.random.choice(
                 [action for action, _ in probabilities],
                 p=[prob for _, prob in probabilities],
             )
         # Be deterministic, choose the child that was most visited
         else:
-            action = np.argmax(
-                [child.visit_count for child in self.root.children.values()]
-            )
+            # Select the action (key) with the highest visit count
+            # print(
+            #     f"Choosing action from root with {len(self.root.children)} children, visit counts: {[child.visit_count for child in self.root.children.values()]}"
+            # )
+            action = max(
+                self.root.children.items(), key=lambda item: item[1].visit_count
+            )[0]
 
         # Update the game state
+
         self.game.make_move(int(action))
 
     def prepare_statistics(self) -> None:
         # TODO: prepare self.chosen_path for the window
         pass
 
-    def simulate(self) -> None:
+    def simulate(self) -> NDArray[np.float32] | None:
         # Grab the moment in time of the root, copy it, save it to the sim path
         node = cast(MCTSNode, self.root)
         scratch_game = self.game.clone()
@@ -289,12 +334,7 @@ class MCTS:
         self.latest_valid_actions_mask = scratch_game.get_valid_moves()
 
         # Make the model call, search will resume from the next step() call
-        self.requests.put(
-            (
-                self.worker,
-                scratch_game.get_canonical_state(),
-            )
-        )
+        return scratch_game.get_canonical_state()
 
     def select_child(self, node: MCTSNode) -> Tuple[int, MCTSNode]:
         _, action, child = max(
