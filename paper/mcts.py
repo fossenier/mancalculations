@@ -127,15 +127,12 @@ class MCTSStatistic:
 
 
 class MCTS:
-    def __init__(self, worker: int, requests: Queue, window: Queue) -> None:
+    def __init__(self) -> None:
         """
         Sets up all variables needed to run the MCTS search, and also puts in
         a model request for the base root state to get the queue started.
         """
         # To make model calls, and save the game when complete
-        self.requests: Queue = requests
-        self.window: Queue = window
-        self.worker: int = worker  # Worker ID for queue sync
 
         # True game state for MCTS flow
         self.game = KalahGame()
@@ -153,8 +150,7 @@ class MCTS:
             6, dtype=np.float32
         )
 
-        # Prompt for  the first model response, which will initialize the root on first step() call
-        requests.put((self.worker, self.game.get_canonical_state()))
+        self.first_call = self.game.get_canonical_state()
 
     def step(
         self, prior: NDArray[np.float32], value: np.float32
@@ -193,8 +189,8 @@ class MCTS:
             if self.game.game_over:
                 self.prepare_statistics()
                 # print(self.chosen_path)
-                self.window.put(self.chosen_path)
-                self.window.empty()  # Flush the window queue
+                # self.window.put(self.chosen_path)
+                # self.window.empty()  # Flush the window queue
                 return (None, self.chosen_path)
             # if self.game.game_over:
             #     self.prepare_statistics()

@@ -10,7 +10,8 @@ class AlphaZeroConfig(object):
         # Number of games played in parallel.
         # self.num_actors = 5000 # from paper
         self.num_cores = 60
-        self.games_per_core = 64
+        self.games_per_batch = 64
+        self.game_batches_per_core = 4
         
         # Number of moves from start of game where the action is chosen
         # using stochastic policy
