@@ -6,9 +6,7 @@ setup to support virtual loss.
 """
 
 import math
-from multiprocessing import Queue
 import numpy as np
-from inference_batcher import inference_queue
 from config import AlphaZeroConfig
 from kalah import KalahGame
 from numpy.typing import NDArray

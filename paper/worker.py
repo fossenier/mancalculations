@@ -6,7 +6,6 @@ to escape the GIL.
 
 from multiprocessing import Queue
 from config import AlphaZeroConfig
-from kalah import KalahGame
 from mcts import MCTS
 from typing import Tuple, List
 import time
@@ -14,7 +13,7 @@ import numpy as np
 import numpy.typing as npt
 
 
-def continually_run_mcts(requests: Queue, responses: Queue, window: Queue):
+def continually_run_mcts(requests: Queue, responses: Queue, finished_games: Queue):
     """
     Runs MCTS games continually, state machine style.
     """
@@ -69,11 +68,13 @@ def continually_run_mcts(requests: Queue, responses: Queue, window: Queue):
             # Advance MCTS
             request, result = game.step(prior, value)
             if request is not None:
+                print("request", flush=True)
                 pending_inference_requests[i] = (i, request)
             elif result is not None:
                 pending_release_games.append(result)
                 games[i] = MCTS()  # Game ended, no more steps needed
                 pending_inference_requests[i] = (i, games[i].first_call)
+                print("game ended")
 
             if (i + 1) % config.games_per_batch == 0:
                 # If we have a full batch of requests, send them
@@ -84,5 +85,5 @@ def continually_run_mcts(requests: Queue, responses: Queue, window: Queue):
                 )
                 requests.empty()  # Flush buffer
 
-        window.put(pending_release_games)
+        finished_games.put(pending_release_games)
         pending_release_games.clear()

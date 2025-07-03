@@ -3,7 +3,7 @@ import cProfile
 import pstats
 import io
 from multiprocessing import get_context, set_start_method, Event
-from mcts_agent import continually_run_mcts
+from paper.worker import continually_run_mcts
 
 
 def profile_wrapper(func, *args, **kwargs):
