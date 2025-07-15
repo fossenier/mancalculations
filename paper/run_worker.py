@@ -30,7 +30,7 @@ def main():
     # Start both processes
     mcts_process.start()
     window_process.start()
-    # inference_process.start()
+    # inference_process.start() 
 
     while True:
         try:
