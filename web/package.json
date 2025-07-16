@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@auth/core": "^0.37.4",
+    "@convex-dev/auth": "^0.0.87",
     "@mantine/core": "^8.1.1",
     "@mantine/hooks": "^8.1.1",
     "convex": "^1.24.8",

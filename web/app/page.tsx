@@ -6,7 +6,7 @@ export default function Home() {
       <main>
         <Center style={{ minHeight: "100vh" }}>
           <Flex align="center" direction="column">
-            <h1>Mancala</h1>
+            <h1>iSE Mancala</h1>
             <Group mt="xl" mb="md">
               <Button size="lg" radius="md" color="blue">
                 Play
