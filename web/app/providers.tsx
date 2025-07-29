@@ -1,10 +1,10 @@
 "use client";
 
-import { ConvexProvider, ConvexReactClient } from "convex/react";
-import { ReactNode } from "react";
+import { ConvexReactClient } from 'convex/react';
+import { ReactNode } from 'react';
 
-import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
-import { createTheme, MantineProvider } from "@mantine/core";
+import { ConvexAuthNextjsProvider } from '@convex-dev/auth/nextjs';
+import { createTheme, MantineProvider } from '@mantine/core';
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
@@ -49,10 +49,8 @@ const theme = createTheme({
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ConvexProvider client={convex}>
-      <ConvexAuthNextjsProvider>
-        <MantineProvider theme={theme}>{children}</MantineProvider>
-      </ConvexAuthNextjsProvider>
-    </ConvexProvider>
+    <ConvexAuthNextjsProvider client={convex}>
+      <MantineProvider theme={theme}>{children}</MantineProvider>
+    </ConvexAuthNextjsProvider>
   );
 }
