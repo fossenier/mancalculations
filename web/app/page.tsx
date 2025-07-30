@@ -1,4 +1,6 @@
-import { Button, Center, Flex, Group } from "@mantine/core";
+import Link from 'next/link';
+
+import { Button, Center, Flex, Group } from '@mantine/core';
 
 export default function Home() {
   return (
@@ -11,9 +13,11 @@ export default function Home() {
               <Button size="lg" radius="md" color="blue">
                 Play
               </Button>
-              <Button size="lg" radius="md" color="lime">
-                Login
-              </Button>
+              <Link href="/login">
+                <Button size="lg" radius="md" color="lime">
+                  Login
+                </Button>
+              </Link>
             </Group>
           </Flex>
         </Center>
