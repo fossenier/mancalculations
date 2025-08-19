@@ -11,9 +11,9 @@
   "dependencies": {
     "@auth/core": "^0.37.4",
     "@convex-dev/auth": "^0.0.87",
-    "@mantine/core": "^8.1.1",
-    "@mantine/form": "^8.2.1",
-    "@mantine/hooks": "^8.1.1",
+    "@mantine/core": "^8.2.5",
+    "@mantine/form": "^8.2.5",
+    "@mantine/hooks": "^8.2.5",
     "@tabler/icons-react": "^3.34.1",
     "convex": "^1.24.8",
     "next": "15.3.3",
@@ -29,7 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
     "postcss": "^8.5.6",
-    "postcss-preset-mantine": "^1.17.0",
+    "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
     "tailwindcss": "^4.1.10",
     "typescript": "^5"
